@@ -1,0 +1,153 @@
+import { Link, router, usePage } from '@/runtime';
+import { useEffect, useState, type ReactNode } from 'react';
+import NewItemModal from '@/Components/NewItemModal';
+import { onOpenNewItem, openNewItem } from '@/lib/newItem';
+import { Coin } from '@/Components/ui/TokenPill';
+import { ToastProvider } from '@/Components/ui/Toast';
+import ErrorBoundary from '@/Components/ErrorBoundary';
+import { GameProvider, useGame } from '@/Components/GameContext';
+import type { PageProps } from '@/types';
+
+const NAV = [
+    { href: '/today', match: '/today', label: 'Today', jp: '今日', icon: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></> },
+    { href: '/items', match: '/items', label: 'All items', jp: '一覧', icon: <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /> },
+    { href: '/calendar', match: '/calendar', label: 'Calendar', jp: '予定', icon: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M3 10h18M8 3v4M16 3v4" /></> },
+    { href: '/master-records', match: '/master-records', label: 'Master record', jp: '台帳', icon: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" strokeLinejoin="round" /> },
+    { href: '/review', match: '/review', label: 'Weekly review', jp: '週報', icon: <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /> },
+    { href: '/locker', match: '/locker', label: 'Locker', jp: '景品', icon: <path d="M8 3l4 2 4-2 5 4-3 3-2-1v12H8V9l-2 1-3-3z" strokeLinejoin="round" /> },
+];
+
+function TokenCard() {
+    const { balance, gain } = useGame();
+    return (
+        <Link
+            href="/locker"
+            className="card-hover relative mt-auto flex flex-col gap-1.5 rounded-[14px] border-2.5 border-ink bg-sun-soft p-3.5 text-ink no-underline shadow-hard-md"
+        >
+            <span className="text-xs font-bold">Your tokens</span>
+            <span className="flex items-center gap-2 font-display text-2xl" aria-live="polite" aria-label={`${balance} tokens`}>
+                <Coin />
+                {balance}
+            </span>
+            <span className="text-xs font-bold text-accent-ink">Spend in Locker →</span>
+            {gain && (
+                <span key={gain.key} className="float absolute -top-3.5 right-2.5 rounded-lg border-2 border-ink bg-sun px-2 py-0.5 font-display text-xs">
+                    {gain.amount > 0 ? '+' : '−'}
+                    {Math.abs(gain.amount)}
+                </span>
+            )}
+        </Link>
+    );
+}
+
+function Shell({ children }: { children: ReactNode }) {
+    const { url } = usePage();
+    const path = url.split('?')[0];
+    const { auth } = usePage<PageProps>().props;
+    const [newOpen, setNewOpen] = useState(false);
+    useEffect(() => onOpenNewItem(() => setNewOpen(true)), []);
+
+    return (
+        <div className="grid min-h-screen grid-cols-1 bg-paper font-sans text-ink md:grid-cols-[236px_minmax(0,1fr)]">
+            <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:p-2">
+                Skip to content
+            </a>
+
+            <aside className="hidden flex-col gap-7 border-r-2.5 border-ink bg-white px-3.5 py-6 md:flex">
+                <div className="flex items-center gap-2.5 px-2">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border-2 border-ink bg-accent font-display text-white" aria-hidden="true">★</span>
+                    <span className="font-display text-base">Task-Chan</span>
+                </div>
+                <nav className="flex flex-col gap-1" aria-label="Main">
+                    {NAV.map((n) => {
+                        const on = path === n.match || path.startsWith(`${n.match}/`);
+                        return (
+                            <Link
+                                key={n.href}
+                                href={n.href}
+                                aria-current={on ? 'page' : undefined}
+                                className={`nav-link flex min-h-[42px] items-center gap-2.5 rounded-[10px] px-3 text-sm font-semibold no-underline ${on ? 'bg-ink text-white' : 'text-ink-2'}`}
+                            >
+                                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">{n.icon}</svg>
+                                {n.label}
+                                <span className="ml-auto text-[11px] font-medium opacity-60">{n.jp}</span>
+                            </Link>
+                        );
+                    })}
+                </nav>
+                <TokenCard />
+                <button
+                    type="button"
+                    onClick={() => router.post('/logout')}
+                    className="min-h-[42px] rounded-[10px] border-2 border-dashed border-ink text-[13px] font-semibold"
+                >
+                    Log out · {auth.user.name}
+                </button>
+            </aside>
+
+            {/* Mobile top bar + tab bar */}
+            <header className="flex items-center justify-between border-b-2.5 border-ink bg-white px-4 py-3 md:hidden">
+                <span className="font-display">Task-Chan</span>
+                <button type="button" onClick={openNewItem} className="min-h-9 rounded-[10px] border-2 border-ink bg-accent px-3 text-[13px] font-bold text-white">+ New</button>
+                <Link href="/locker" className="flex items-center gap-1.5 font-display text-sm text-ink no-underline"><MobileBalance /></Link>
+            </header>
+
+            <main id="main" className="relative flex min-w-0 flex-col gap-7 overflow-hidden px-4 pb-24 pt-6 md:px-14 md:pb-12 md:pt-9">
+                <ErrorBoundary key={url}>{children}</ErrorBoundary>
+            </main>
+
+            <NewItemModal show={newOpen} onClose={() => setNewOpen(false)} />
+
+            <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t-2.5 border-ink bg-white md:hidden" aria-label="Main (mobile)">
+                {NAV.map((n) => {
+                    const on = path === n.match || path.startsWith(`${n.match}/`);
+                    return (
+                        <Link key={n.href} href={n.href} aria-current={on ? 'page' : undefined} className={`flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold no-underline ${on ? 'bg-ink text-white' : 'text-ink-2'}`}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">{n.icon}</svg>
+                            {n.label.split(' ')[0]}
+                        </Link>
+                    );
+                })}
+            </nav>
+        </div>
+    );
+}
+
+function MobileBalance() {
+    const { balance } = useGame();
+    return (
+        <>
+            <Coin size={18} />
+            {balance}
+        </>
+    );
+}
+
+export default function AppLayout({ children }: { children: ReactNode }) {
+    return (
+        <GameProvider>
+            <ToastProvider>
+                <Shell>{children}</Shell>
+            </ToastProvider>
+        </GameProvider>
+    );
+}
+
+/** Page header block used by every screen: mono eyebrow + display title. */
+export function PageHeader({ eyebrow, title, accent = '.', children }: { eyebrow: string; title: ReactNode; accent?: string; children?: ReactNode }) {
+    return (
+        <>
+            <div className="halftone pointer-events-none absolute -right-8 -top-8 h-[220px] w-[420px] opacity-[0.07]" aria-hidden="true" />
+            <header className="rise relative flex flex-wrap items-end justify-between gap-6">
+                <div className="flex flex-col gap-2">
+                    <span className="font-mono text-xs uppercase tracking-[0.1em] text-ink-3">{eyebrow}</span>
+                    <h1 className="font-display text-[40px] font-normal leading-none md:text-[56px]">
+                        {title}
+                        <span className="text-accent">{accent}</span>
+                    </h1>
+                </div>
+                {children}
+            </header>
+        </>
+    );
+}
