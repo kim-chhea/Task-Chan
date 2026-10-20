@@ -11,6 +11,7 @@ import { Coin } from '@/Components/ui/TokenPill';
 import { useToast } from '@/Components/ui/Toast';
 import { TypeChip } from '@/Components/ui/Chip';
 import AppLayout from '@/Layouts/AppLayout';
+import { attachmentErrorText, ATTACHMENT_ACCEPT, clientFileError } from '@/lib/attachments';
 import { api, apiUrl, ApiError } from '@/lib/api';
 import { fileSize, longDay, PRIORITY_LABEL, shortDay, STATUS_LABEL, todayIso, TYPE_LABEL } from '@/lib/format';
 import { rewardPreview } from '@/lib/tokens';
@@ -21,6 +22,18 @@ const NotesEditor = lazy(() => import('@/Components/NotesEditor'));
 
 interface SubTask { id: number; title: string; done: boolean }
 interface Attachment { id: number; name: string; size: number; mime: string | null; url: string }
+/** POST /api/items/{item}/attachments returns the row, not the screen's `name` + `url` shape. The list reloads from the item. */
+interface CreatedAttachment {
+    id: number;
+    item_id: number;
+    disk: string;
+    path: string;
+    original_name: string;
+    mime: string | null;
+    size: number;
+    created_at: string;
+    updated_at: string;
+}
 interface FullItem extends ItemDto {
     notes: unknown[] | null;
     sub_tasks: SubTask[];
@@ -48,6 +61,7 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
     const [burst, setBurst] = useState(0);
     const [savedAt, setSavedAt] = useState<string>('Saved');
     const [newSub, setNewSub] = useState('');
+    const [fileErrors, setFileErrors] = useState<string[]>([]);
     const [title, setTitle] = useState(item.title);
     const editingTitle = useRef(false);
     const { rules } = usePage<PageProps>().props;
@@ -101,12 +115,19 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
         try { await api('DELETE', `/sub-tasks/${s.id}`); reload(['item']); } catch (e) { fail(e); }
     }
     async function upload(files: FileList | null) {
-        if (!files) return;
+        if (!files?.length) return;
+        const messages: string[] = [];
         for (const f of Array.from(files)) {
-            if (f.size > 10 * 1024 * 1024) { toast(`${f.name} is over 10 MB.`); continue; }
+            const local = clientFileError(f);
+            if (local) { messages.push(local); continue; }
             const fd = new FormData(); fd.append('file', f);
-            try { await api('POST', `/items/${item.id}/attachments`, fd); } catch (e) { fail(e); }
+            try {
+                await api<CreatedAttachment>('POST', `/items/${item.id}/attachments`, fd);
+            } catch (e) {
+                messages.push(...attachmentErrorText(e));
+            }
         }
+        setFileErrors(messages);
         reload(['item']);
     }
     async function link(id: number) {
@@ -168,7 +189,14 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
                             <div key={s.id} className="group flex items-center gap-3">
                                 <Checkbox checked={s.done} onChange={() => toggleSub(s)} label={`${s.done ? 'Untick' : 'Tick'}: ${s.title}`} />
                                 <span className={`grow text-[15px] font-medium ${s.done ? 'text-ink-4 line-through' : ''}`}>{s.title}</span>
-                                <button type="button" onClick={() => removeSub(s)} aria-label={`Remove ${s.title}`} className="text-ink-4 opacity-0 hover:text-pink focus:opacity-100 group-hover:opacity-100">✕</button>
+                                <button
+                                    type="button"
+                                    onClick={() => removeSub(s)}
+                                    aria-label={`Delete sub-task ${s.title}`}
+                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-base text-ink-3 opacity-100 hover:text-pink focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                                >
+                                    <span aria-hidden="true">✕</span>
+                                </button>
                             </div>
                         ))}
                         <form onSubmit={(e) => { e.preventDefault(); addSub(); }} className="flex gap-2">
@@ -192,8 +220,13 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
                             className="flex flex-col items-center gap-1 rounded-xl border-2 border-dashed border-ink p-5 text-center"
                         >
                             <button type="button" onClick={() => fileInput.current?.click()} className="font-bold text-accent-ink">Drop files or browse</button>
-                            <span className="text-xs text-ink-3">Up to 10 MB each</span>
-                            <input ref={fileInput} type="file" multiple hidden onChange={(e: ChangeEvent<HTMLInputElement>) => { upload(e.target.files); e.target.value = ''; }} />
+                            <span className="text-xs text-ink-3">pdf, images, text, Office, or zip. Up to 10 MB each.</span>
+                            {fileErrors.length > 0 && (
+                                <div role="alert" className="mt-1 w-full rounded-[10px] border-2 border-ink bg-pink-soft px-3 py-2 text-left text-sm font-semibold text-ink">
+                                    {fileErrors.map((msg, i) => <p key={i}>{msg}</p>)}
+                                </div>
+                            )}
+                            <input ref={fileInput} type="file" accept={ATTACHMENT_ACCEPT} multiple hidden onChange={(e: ChangeEvent<HTMLInputElement>) => { upload(e.target.files); e.target.value = ''; }} />
                         </div>
                     </Card>
                 </div>

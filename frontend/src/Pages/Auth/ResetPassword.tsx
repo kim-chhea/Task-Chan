@@ -3,8 +3,8 @@ import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
-import { Head, useForm } from '@/runtime';
-import { FormEventHandler } from 'react';
+import { Head, route, useForm } from '@/runtime';
+import { FormEventHandler, useState } from 'react';
 
 export default function ResetPassword({
     token,
@@ -19,11 +19,21 @@ export default function ResetPassword({
         password: '',
         password_confirmation: '',
     });
+    const [serverMessage, setServerMessage] = useState<string | null>(null);
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
+        setServerMessage(null);
 
         post(route('password.store'), {
+            onError: (_errors, problem) => {
+                if (!problem) return;
+                // 422 puts the useful text on errors.email or errors.password.
+                // The summary is shown as well when it isn't already one of those lines.
+                const lines = Object.values(problem.fields);
+                if (problem.stated && !lines.includes(problem.stated)) setServerMessage(problem.stated);
+                else if (!lines.length) setServerMessage(problem.message);
+            },
             onFinish: () => reset('password', 'password_confirmation'),
         });
     };
@@ -32,7 +42,15 @@ export default function ResetPassword({
         <GuestLayout>
             <Head title="Reset Password" />
 
+            {serverMessage && (
+                <div role="alert" className="mb-4 rounded-lg border-2 border-ink bg-pink-soft p-3 text-sm font-semibold text-ink">
+                    {serverMessage}
+                </div>
+            )}
+
             <form onSubmit={submit}>
+                <InputError message={errors.token} className="mb-4" />
+
                 <div>
                     <InputLabel htmlFor="email" value="Email" />
 
@@ -73,6 +91,7 @@ export default function ResetPassword({
                     />
 
                     <TextInput
+                        id="password_confirmation"
                         type="password"
                         name="password_confirmation"
                         value={data.password_confirmation}

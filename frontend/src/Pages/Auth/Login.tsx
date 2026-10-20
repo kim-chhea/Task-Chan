@@ -4,7 +4,7 @@ import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
-import { Head, Link, useForm } from '@/runtime';
+import { Head, Link, route, useForm } from '@/runtime';
 import { FormEventHandler } from 'react';
 
 export default function Login({
@@ -41,7 +41,7 @@ export default function Login({
             )}
 
             {status && (
-                <div className="mb-4 text-sm font-medium text-green-600">
+                <div role="status" className="mb-4 text-sm font-medium text-green-700">
                     {status}
                 </div>
             )}

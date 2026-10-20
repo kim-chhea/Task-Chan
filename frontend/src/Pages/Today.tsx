@@ -226,7 +226,7 @@ function Group({ name, tag, items, isDone, toggle, pending, hot }: { name: strin
                     <div key={it.id} className="row-hover rise grid min-h-[56px] grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 rounded-[14px] border-2 border-paper-3 bg-white px-3.5 py-2 md:grid-cols-[28px_52px_minmax(0,1fr)_auto_auto_auto] md:py-0" style={{ animationDelay: `${0.25 + k * 0.06}s` }}>
                         <Checkbox checked={done} disabled={pending.has(it.id)} onChange={() => toggle(it)} label={`${done ? 'Mark not done' : 'Mark done'}: ${it.title}`} />
                         <span className="hidden font-mono text-xs text-ink-3 md:inline">#{it.number}</span>
-                        <Link href={`/items/${it.id}`} className={`truncate text-[15px] font-semibold no-underline ${done ? 'text-ink-4 line-through' : 'text-ink'}`}>{it.title}</Link>
+                        <Link href={`/items/${it.id}`} className={`truncate text-[15px] font-semibold no-underline ${done ? 'text-ink-3 line-through' : 'text-ink'}`}>{it.title}</Link>
                         <span className="hidden md:inline"><TypeChip type={it.type} /></span>
                         <TokenPill amount={it.reward} prefix={done ? '✓ ' : '+'} tone={done ? 'mint' : 'sun'} />
                         <span className={`hidden min-w-[76px] text-right text-xs font-bold md:inline ${(hot && !done && it.deadline) || isOverdue(it.deadline, done) ? 'text-[#C2185B]' : 'text-ink-3'}`}>{dueText(it.deadline)}</span>

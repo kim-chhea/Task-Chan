@@ -1,19 +1,26 @@
 import InputError from '@/Components/InputError';
+import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
-import { Head, useForm } from '@/runtime';
-import { FormEventHandler } from 'react';
+import { Head, route, useForm } from '@/runtime';
+import { FormEventHandler, useState } from 'react';
 
 export default function ForgotPassword({ status }: { status?: string }) {
     const { data, setData, post, processing, errors } = useForm({
         email: '',
     });
+    const [limitMessage, setLimitMessage] = useState<string | null>(null);
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
+        setLimitMessage(null);
 
-        post(route('password.email'));
+        post(route('password.email'), {
+            onError: (_errors, problem) => {
+                if (problem?.status === 429) setLimitMessage(problem.stated ?? problem.message);
+            },
+        });
     };
 
     return (
@@ -27,12 +34,20 @@ export default function ForgotPassword({ status }: { status?: string }) {
             </div>
 
             {status && (
-                <div className="mb-4 text-sm font-medium text-green-600">
+                <div role="status" className="mb-4 text-sm font-medium text-green-700">
                     {status}
                 </div>
             )}
 
+            {limitMessage && (
+                <div role="alert" className="mb-4 rounded-lg border-2 border-ink bg-pink-soft p-3 text-sm font-semibold text-ink">
+                    {limitMessage}
+                </div>
+            )}
+
             <form onSubmit={submit}>
+                <InputLabel htmlFor="email" value="Email" />
+
                 <TextInput
                     id="email"
                     type="email"

@@ -3,8 +3,8 @@ import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
-import { Head, Link, useForm } from '@/runtime';
-import { FormEventHandler } from 'react';
+import { Head, Link, route, useForm } from '@/runtime';
+import { FormEventHandler, useState } from 'react';
 
 export default function Register() {
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -13,20 +13,47 @@ export default function Register() {
         password: '',
         password_confirmation: '',
     });
+    const [closedMessage, setClosedMessage] = useState<string | null>(null);
+    const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
+        setBusyMessage(null);
 
         post(route('register'), {
+            onError: (_errors, problem) => {
+                if (!problem) return;
+                if (problem.status === 403) {
+                    setClosedMessage(problem.stated ?? 'Registration is closed.');
+                    return;
+                }
+                // Two first-user signups can race. The loser gets 429 {message:""}.
+                if (problem.status === 429) {
+                    setBusyMessage(problem.stated ?? 'Registration is busy right now. Wait a moment and try again.');
+                }
+            },
             onFinish: () => reset('password', 'password_confirmation'),
         });
     };
+
+    const closed = closedMessage !== null;
+    const notice = closedMessage ?? busyMessage;
 
     return (
         <GuestLayout>
             <Head title="Register" />
 
+            {notice && (
+                <div role="alert" className="mb-4 rounded-lg border-2 border-ink bg-pink-soft p-3 text-sm font-semibold text-ink">
+                    <p>{notice}</p>
+                    <Link href={route('login')} className="mt-2 inline-flex font-bold underline">
+                        Log in
+                    </Link>
+                </div>
+            )}
+
             <form onSubmit={submit}>
+                <fieldset disabled={processing || closed} className="min-w-0 border-0 p-0">
                 <div>
                     <InputLabel htmlFor="name" value="Name" />
 
@@ -37,6 +64,7 @@ export default function Register() {
                         className="mt-1 block w-full"
                         autoComplete="name"
                         isFocused={true}
+                        disabled={processing || closed}
                         onChange={(e) => setData('name', e.target.value)}
                         required
                     />
@@ -54,6 +82,7 @@ export default function Register() {
                         value={data.email}
                         className="mt-1 block w-full"
                         autoComplete="username"
+                        disabled={processing || closed}
                         onChange={(e) => setData('email', e.target.value)}
                         required
                     />
@@ -71,6 +100,7 @@ export default function Register() {
                         value={data.password}
                         className="mt-1 block w-full"
                         autoComplete="new-password"
+                        disabled={processing || closed}
                         onChange={(e) => setData('password', e.target.value)}
                         required
                     />
@@ -91,6 +121,7 @@ export default function Register() {
                         value={data.password_confirmation}
                         className="mt-1 block w-full"
                         autoComplete="new-password"
+                        disabled={processing || closed}
                         onChange={(e) =>
                             setData('password_confirmation', e.target.value)
                         }
@@ -111,10 +142,11 @@ export default function Register() {
                         Already registered?
                     </Link>
 
-                    <PrimaryButton className="ms-4" disabled={processing}>
+                    <PrimaryButton className="ms-4" disabled={processing || closed}>
                         Register
                     </PrimaryButton>
                 </div>
+                </fieldset>
             </form>
         </GuestLayout>
     );

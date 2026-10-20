@@ -8,6 +8,61 @@ export class ApiError extends Error {
     }
 }
 
+/** A server failure turned into plain strings. Nothing here is raw JSON or HTML. */
+export interface ApiProblem {
+    status: number;
+    /** Sentence to show. The body message when it has text, otherwise a fallback. */
+    message: string;
+    /** Trimmed top-level `message`, or null when the server left it blank. */
+    stated: string | null;
+    /** First message for each key under `errors`. */
+    fields: Record<string, string>;
+    /** Every message for each key under `errors`, in order. */
+    details: Record<string, string[]>;
+}
+
+function errorStrings(value: unknown): string[] {
+    if (typeof value === 'string') return value.trim() ? [value] : [];
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is string => typeof item === 'string' && item.trim() !== '');
+}
+
+const EMPTY_PROBLEM = (message: string): ApiProblem => ({ status: 0, message, stated: null, fields: {}, details: {} });
+
+/** Used when the JSON `message` is missing or `""` (the register lock race sends that). */
+export function fallbackMessage(status: number): string {
+    if (status === 429) return 'Please wait a moment and try again.';
+    if (status === 403) return "You don't have permission to do that.";
+    if (status === 413) return 'The file must be 10 MB or smaller.';
+    return 'Something went wrong.';
+}
+
+export function statedMessage(data: Record<string, unknown> | undefined): string | null {
+    const raw = data && typeof data.message === 'string' ? data.message.trim() : '';
+    return raw || null;
+}
+
+/**
+ * Read a failed `api()` call. Validation bags (`errors.file`, `errors.email`, …)
+ * stay as text the UI can render. A blank `message` does not become the text shown.
+ */
+export function apiProblem(error: unknown, fallback = 'Something went wrong.'): ApiProblem {
+    if (!(error instanceof ApiError)) return EMPTY_PROBLEM(fallback);
+    const details: Record<string, string[]> = {};
+    const bag = error.data.errors;
+    if (bag && typeof bag === 'object') {
+        for (const [key, value] of Object.entries(bag as Record<string, unknown>)) {
+            const messages = errorStrings(value);
+            if (messages.length) details[key] = messages;
+        }
+    }
+    const fields = Object.fromEntries(Object.entries(details).map(([key, messages]) => [key, messages[0]]));
+    const stated = statedMessage(error.data);
+    const own = error.message.trim();
+    const message = stated ?? (own || fallbackMessage(error.status) || fallback);
+    return { status: error.status, message, stated, fields, details };
+}
+
 /** Empty in dev (Vite proxies /api and /sanctum to the Laravel backend). Set VITE_API_URL when the API lives on another origin. */
 const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -86,9 +141,10 @@ export async function api<T = unknown>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' 
     if (!res.ok) {
         // A failed login is a 422, so a 401 here always means "your session is gone".
         if (res.status === 401 && url !== '/bootstrap') window.dispatchEvent(new Event(UNAUTHENTICATED_EVENT));
-        const first = data?.errors ? Object.values<string[]>(data.errors)[0]?.[0] : undefined;
-        const fallback = res.status === 413 ? 'That file is too large.' : `Request failed (${res.status})`;
-        throw new ApiError(res.status, first ?? data?.message ?? fallback, data);
+        const first = data?.errors ? Object.values<string[]>(data.errors).flat().find((item) => typeof item === 'string' && item.trim()) : undefined;
+        const stated = statedMessage(data);
+        // An empty string is not a message: `message: ""` must not hide the fallback.
+        throw new ApiError(res.status, (typeof first === 'string' ? first : '') || stated || fallbackMessage(res.status), data);
     }
 
     return data as T;
