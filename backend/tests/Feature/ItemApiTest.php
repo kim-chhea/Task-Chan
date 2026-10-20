@@ -94,6 +94,62 @@ it('stores attachments within the size limit and blocks oversize files', functio
     expect($item->attachments()->count())->toBe(1);
 });
 
+it('rejects an attachment over 10 MB', function () {
+    Storage::fake('local');
+    $item = mine($this->user);
+    $this->actingAs($this->user);
+
+    $this->postJson("/api/items/{$item->id}/attachments", [
+        'file' => UploadedFile::fake()->create('big.pdf', 10241, 'application/pdf'),
+    ])->assertUnprocessable()->assertExactJson([
+        'message' => 'The file must be 10 MB or smaller.',
+        'errors' => ['file' => ['The file must be 10 MB or smaller.']],
+    ]);
+
+    expect($item->attachments()->count())->toBe(0);
+});
+
+it('rejects an attachment type that is not allowed', function () {
+    Storage::fake('local');
+    $item = mine($this->user);
+    $this->actingAs($this->user);
+
+    $this->postJson("/api/items/{$item->id}/attachments", [
+        'file' => UploadedFile::fake()->create('payload.exe', 20),
+    ])->assertUnprocessable()->assertExactJson([
+        'message' => 'This file type is not allowed.',
+        'errors' => ['file' => ['This file type is not allowed.']],
+    ]);
+
+    expect($item->attachments()->count())->toBe(0);
+});
+
+it('stores each allowed attachment type and keeps the created payload', function () {
+    Storage::fake('local');
+    $item = mine($this->user);
+    $this->actingAs($this->user);
+
+    foreach (['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'txt', 'md', 'csv', 'docx', 'xlsx', 'zip'] as $ext) {
+        $created = $this->postJson("/api/items/{$item->id}/attachments", [
+            'file' => UploadedFile::fake()->create("notes.{$ext}", 12),
+        ])->assertCreated();
+
+        $body = $created->json();
+        expect(array_keys($body))->toEqualCanonicalizing([
+            'id', 'item_id', 'disk', 'path', 'original_name', 'mime', 'size', 'created_at', 'updated_at',
+        ])->and($body['item_id'])->toBe($item->id)
+            ->and($body['original_name'])->toBe("notes.{$ext}")
+            ->and($body['disk'])->toBe('local')
+            ->and($body['size'])->toBe(12 * 1024);
+    }
+
+    $this->postJson("/api/items/{$item->id}/attachments", [
+        'file' => UploadedFile::fake()->create('edge.pdf', 10240, 'application/pdf'),
+    ])->assertCreated();
+
+    expect($item->attachments()->count())->toBe(13);
+});
+
 it('handles sub-tasks and links', function () {
     $item = mine($this->user);
     $other = mine($this->user);
@@ -190,4 +246,3 @@ it('sends defensive headers on API responses', function () {
         ->assertHeader('X-Frame-Options', 'DENY')
         ->assertHeader('Referrer-Policy', 'no-referrer');
 });
-
