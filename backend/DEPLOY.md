@@ -1,10 +1,20 @@
 # Deploy
 
-The API (this directory) and the React app (`../frontend`) are served from the **same host**. Browsers call `/api` and `/sanctum` on the SPA's origin, so the SPA's `connect-src 'self'` is the API origin. Leave `VITE_API_URL` empty for that setup. A split-host build (`VITE_API_URL=https://api.example.com`, see `../README.md`) still works: the production build adds that origin to `connect-src`. If nginx also sends the header below, add the same origin there, because the browser enforces the header and the `<meta>` policy together.
+The API (this directory) and the React app (`../frontend`) are served from the **same host** when you can. Browsers then call `/api` and `/sanctum` on the SPA's origin. Leave `VITE_API_URL` and `CSP_CONNECT_SRC` empty, and `connect-src 'self'` is the API origin.
+
+A split-host deploy (the SPA on `app.example.com`, the API on `api.example.com`) sets **one** value, `CSP_CONNECT_SRC=https://api.example.com`, in the Laravel environment and in the frontend build environment, and sets `VITE_API_URL` to that same origin. `CSP_CONNECT_SRC` is what `connect-src` uses in every place the browser can see:
+
+- the nginx header in `deploy/nginx/csp.conf` (regenerate it with `php artisan csp:nginx` after changing the variable)
+- the Laravel `Content-Security-Policy` header (`App\Support\ContentSecurityPolicy`, used when this app returns HTML)
+- the `<meta http-equiv="Content-Security-Policy">` that `npm run build` writes
+
+The browser enforces the header and the meta policy together. A meta tag that lists the API origin does not help when the header still says `connect-src 'self'`. The frontend build fails if `VITE_API_URL`'s origin is missing from `CSP_CONNECT_SRC`, so that mismatch cannot ship.
+
+The meta tag cannot set `frame-ancestors` (browsers ignore that directive in a meta policy and log a warning). It is not a full replacement for the header. The header is what sends `frame-ancestors 'none'`.
 
 ## Laravel Cloud
 1. Create an app from this repo, attach a MySQL 8 database, and a bucket for files. Set the application root to `backend` (the directory that contains `artisan`).
-2. Env: `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL`, `APP_TIMEZONE=Asia/Bangkok`, `FILESYSTEM_DISK=s3` (+ `AWS_*`), `SANCTUM_STATEFUL_DOMAINS` (the SPA host), `SESSION_DOMAIN`, `SESSION_SECURE_COOKIE=true`. Same-host deploys also set `FRONTEND_URL` to that host and `CORS_ALLOWED_ORIGINS` to it.
+2. Env: `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL`, `APP_TIMEZONE=Asia/Bangkok`, `FILESYSTEM_DISK=s3` (+ `AWS_*`), `SANCTUM_STATEFUL_DOMAINS` (the SPA host), `SESSION_DOMAIN`, `SESSION_SECURE_COOKIE=true`. Same-host deploys also set `FRONTEND_URL` to that host and `CORS_ALLOWED_ORIGINS` to it. Split-host deploys set `CSP_CONNECT_SRC` to the API origin (the same value the frontend build uses).
 3. Build: `composer install --no-dev --optimize-autoloader`, then build `../frontend` (`npm ci && npm run build`) and publish `frontend/dist`.
 4. Deploy command: `php artisan migrate --force`. Seed only the first time if you want the demo data; otherwise register your account at `/register` (closes after the first user).
 
@@ -51,11 +61,21 @@ Confirm with `php -r` as above, using the FPM binary if CLI and FPM ever diverge
 
 ### SPA, nginx, and Content-Security-Policy
 
-The SPA is `frontend/dist` (Vite build, fallback to `index.html`). This Laravel app does not render it: `GET /` is JSON, and `SecurityHeaders` only attaches the CSP to an HTML response. On Forge, nginx is what serves the document, so the policy lives in `deploy/nginx/csp.conf`. Paste that `add_header` into the site's `server` block. If a `location` sets any `add_header` of its own, nginx drops server-level `add_header` values for that location; repeat the CSP line there.
+The SPA is `frontend/dist` (Vite build, fallback to `index.html`). This Laravel app does not render it: `GET /` is JSON, and `SecurityHeaders` only attaches the CSP to an HTML response. On Forge, nginx is what serves the document, so the policy lives in `deploy/nginx/csp.conf`. Include that file from the site's `server` block (or paste it). If a `location` sets any `add_header` of its own, nginx drops server-level `add_header` values for that location; repeat the CSP `add_header` line there. `sub_filter` still applies from the server block as long as that location does not define its own `sub_filter`.
 
-`npm run dev` does not send the policy. Vite's dev client uses an inline preamble and a websocket, which this CSP would block. `npm run build` writes the policy into `dist/index.html` as a `<meta http-equiv="Content-Security-Policy">` for static hosts that do not set a header. That meta tag omits `frame-ancestors` (browsers ignore it in a meta tag and log a warning). The nginx header is what sends `frame-ancestors 'none'`.
+When the API is on another origin, set `CSP_CONNECT_SRC` (see the top of this file) and regenerate the snippet before reloading nginx:
 
-Fonts are self-hosted (`@fontsource/dela-gothic-one`, `@fontsource/geist`, `@fontsource/geist-mono`). There is no Google Fonts stylesheet, so `style-src` and `font-src` stay `'self'`. A few components set element `style` attributes (animation delay, progress width). Those are covered by `style-src-attr 'unsafe-inline'`; stylesheets are not.
+```
+php artisan csp:nginx > deploy/nginx/csp.conf
+```
+
+An empty `CSP_CONNECT_SRC` reprints the committed file. The command reads Laravel's config, so run it on the environment that has the variable set.
+
+`npm run dev` does not send the policy. Vite's dev client uses an inline preamble and a websocket, which this CSP would block. `npm run build` writes two tags into `dist/index.html`: `<meta name="csp-nonce" content="__CSP_NONCE__">` and a `<meta http-equiv="Content-Security-Policy">` whose `style-src` nonce is the same placeholder. nginx's `sub_filter` replaces `__CSP_NONCE__` with `$request_id` and the header's `style-src` uses that same value. The notes editor (ProseMirror and Mantine) injects `<style>` tags; the nonce lets those tags through. `style-src` is `'self'` plus that nonce. It does not use `'unsafe-inline'`.
+
+That meta policy omits `frame-ancestors`. Browsers ignore `frame-ancestors` in a meta tag and log a warning, so the meta tag is not a full replacement for this header. A static host that cannot run the `sub_filter` also cannot fill in the nonce; serve the document with the nginx snippet (or with Laravel, which substitutes the placeholder when it returns HTML) so the header and the HTML carry the same nonce.
+
+Fonts are self-hosted (`@fontsource/dela-gothic-one`, `@fontsource/geist`, `@fontsource/geist-mono`). There is no Google Fonts stylesheet, so `style-src` and `font-src` stay `'self'`. A few components set element `style` attributes (animation delay, progress width). Those are covered by `style-src-attr 'unsafe-inline'`; a nonce does not apply to style attributes, and stylesheets are not allowed from `'unsafe-inline'`.
 
 Same-host sketch for a checkout at `/home/forge/task-chan` (keep Forge's `listen` and `ssl_certificate` lines; this is the part that serves the SPA and the API on one name):
 
@@ -64,7 +84,7 @@ root /home/forge/task-chan/frontend/dist;
 index index.html;
 client_max_body_size 12M;
 
-add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'" always;
+include /home/forge/task-chan/backend/deploy/nginx/csp.conf;
 add_header X-Content-Type-Options "nosniff" always;
 add_header X-Frame-Options "DENY" always;
 add_header Referrer-Policy "no-referrer" always;
@@ -101,7 +121,7 @@ location ~ ^/verify-email/[^/]+/[^/]+$ {
 
 `SANCTUM_STATEFUL_DOMAINS` must include the site host or every `/api` call returns 401.
 
-If Laravel itself returns the SPA HTML, `app/Http/Middleware/SecurityHeaders.php` sets this same header on any `text/html` response and does not set it on JSON.
+If Laravel itself returns the SPA HTML, `app/Http/Middleware/SecurityHeaders.php` sets this same header on any `text/html` response (with `connect-src` from `CSP_CONNECT_SRC` and a per-request style nonce) and replaces `__CSP_NONCE__` in the body. It does not set the CSP on JSON.
 
 ## After deploy
 Log in, check `/today`, complete an item, confirm the token card matches `/locker`.
@@ -110,6 +130,6 @@ Log in, check `/today`, complete an item, confirm the token card matches `/locke
 - `TRUSTED_PROXIES=*` (or a comma list of load-balancer IPs) when the app sits behind a proxy, so HTTPS and client IPs are detected correctly.
 - **Mail:** `MAIL_MAILER=log` only writes reset links to the log. Set a real mailer (`MAIL_MAILER=smtp` plus `MAIL_*`) or password reset will not reach you.
 - Run `php artisan optimize` after each deploy. Back up the database and the file disk.
-- API responses carry `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Cache-Control: no-store` (see `app/Http/Middleware/SecurityHeaders.php`). The SPA document also carries `Content-Security-Policy` (nginx snippet above, and the middleware when the response is HTML).
+- API responses carry `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Cache-Control: no-store` (see `app/Http/Middleware/SecurityHeaders.php`). The SPA document also carries `Content-Security-Policy` (nginx snippet above, and the middleware when the response is HTML). Split-host deploys set `CSP_CONNECT_SRC` to the API origin for both Laravel and the frontend build, and `deploy/nginx/csp.conf` was regenerated with `php artisan csp:nginx`.
 - `deploy/php/production.ini` is loaded (`upload_max_filesize=12M`, `post_max_size=12M`, `expose_php=Off`) and nginx `client_max_body_size` is at least `12M`.
 - `.env` is git-ignored: never commit it, and rotate any database password that has been shared.
