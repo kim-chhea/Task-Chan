@@ -31,6 +31,7 @@ class ContentSecurityPolicy
     {
         $connect = implode(' ', self::connectSources());
         $policy = self::policy("'self' 'nonce-\$csp_nonce'", '$csp_connect_src');
+        $header = 'add_header Content-Security-Policy "'.$policy.'" always;';
 
         $lines = [
             '# Content-Security-Policy for the Task-Chan SPA.',
@@ -41,16 +42,34 @@ class ContentSecurityPolicy
             '# enforces both. The meta tag cannot set frame-ancestors; this header does.',
             '# __CSP_NONCE__ in the HTML is replaced with $request_id, the same nonce style-src',
             '# sends for the notes editor style tags. style-src does not allow unsafe-inline.',
+            '# nginx 1.31.2 CHANGES: "now the $request_id variable uses SipHash-2-4". That release',
+            '# replaced OpenSSL RAND_bytes; the change describes $request_id as a non-security',
+            '# identifier. If this nginx\'s $request_id is not from a cryptographic RNG, generate',
+            '# the nonce another way and use that same value in style-src and in the HTML.',
+            '# Do not precompress index.html. gzip_static serves that file as-is and skips',
+            '# sub_filter, so the placeholder __CSP_NONCE__ would be sent to the browser.',
             '# nginx does not inherit add_header into a location that sets its own add_header.',
-            '# Repeat the add_header line there. Requires ngx_http_sub_module and ngx_http_gunzip_module.',
+            '# location = /index.html therefore repeats the CSP and the other security headers.',
+            '# Cache-Control no-store is only there, so /assets/* is not marked no-store.',
+            '# Requires ngx_http_sub_module and ngx_http_gunzip_module. Include this file from',
+            '# the server block, not from inside another location.',
             '',
             'set $csp_connect_src "'.$connect.'";',
             'set $csp_nonce $request_id;',
             'gunzip on;',
             'sub_filter_once off;',
-            'sub_filter_types text/html;',
+            '# text/html is already the default sub_filter type. Listing it warns: duplicate MIME type.',
             'sub_filter "'.self::NONCE_PLACEHOLDER.'" $csp_nonce;',
-            'add_header Content-Security-Policy "'.$policy.'" always;',
+            $header,
+            '',
+            '# index.html itself, and the internal redirect from try_files ... /index.html.',
+            'location = /index.html {',
+            '    '.$header,
+            '    add_header X-Content-Type-Options "nosniff" always;',
+            '    add_header X-Frame-Options "DENY" always;',
+            '    add_header Referrer-Policy "no-referrer" always;',
+            '    add_header Cache-Control "no-store" always;',
+            '}',
             '',
         ];
 

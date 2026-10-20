@@ -3,6 +3,19 @@
 /** Replaced in the built HTML with the per-request nonce. Must match ContentSecurityPolicy::NONCE_PLACEHOLDER. */
 export const CSP_NONCE_PLACEHOLDER = '__CSP_NONCE__';
 
+/**
+ * True for index.html and the SPA routes that fall back to it.
+ * /assets/* is never a document, so those files are not marked no-store.
+ */
+export function isSpaDocument(url, method = 'GET') {
+    if (method !== 'GET' && method !== 'HEAD') return false;
+    const pathname = String(url ?? '/').split('?')[0] || '/';
+    if (pathname === '/assets' || pathname.startsWith('/assets/')) return false;
+    if (pathname === '/index.html' || pathname.endsWith('/index.html')) return true;
+    const last = pathname.split('/').pop() ?? '';
+    return !last.includes('.');
+}
+
 /** Origin the browser will call, or null when the value is not an absolute http(s) URL. */
 export function apiOrigin(apiUrl) {
     const raw = (apiUrl ?? '').trim();

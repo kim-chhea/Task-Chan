@@ -61,7 +61,11 @@ Confirm with `php -r` as above, using the FPM binary if CLI and FPM ever diverge
 
 ### SPA, nginx, and Content-Security-Policy
 
-The SPA is `frontend/dist` (Vite build, fallback to `index.html`). This Laravel app does not render it: `GET /` is JSON, and `SecurityHeaders` only attaches the CSP to an HTML response. On Forge, nginx is what serves the document, so the policy lives in `deploy/nginx/csp.conf`. Include that file from the site's `server` block (or paste it). If a `location` sets any `add_header` of its own, nginx drops server-level `add_header` values for that location; repeat the CSP `add_header` line there. `sub_filter` still applies from the server block as long as that location does not define its own `sub_filter`.
+The SPA is `frontend/dist` (Vite build, fallback to `index.html`). This Laravel app does not render it: `GET /` is JSON, and `SecurityHeaders` only attaches the CSP to an HTML response. On Forge, nginx is what serves the document, so the policy lives in `deploy/nginx/csp.conf`. Include that file from the site's `server` block (or paste it), not from inside another `location`.
+
+`csp.conf` marks only `location = /index.html` with `Cache-Control: no-store`. That location is the file itself and the internal redirect from `try_files ... /index.html`. A `location` that sets any `add_header` drops server-level `add_header` values, so that block repeats the CSP and the `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` lines. Leave `location /` without its own `add_header`: `/assets/*` is served from there and must not be `no-store`. `sub_filter` still applies from the server block as long as that location does not define its own `sub_filter`.
+
+Do not precompress `index.html` (`index.html.gz`, or `gzip_static` for that file). `gzip_static` serves the compressed file and skips `sub_filter`, so `__CSP_NONCE__` would reach the browser. nginx 1.31.2's changelog says `$request_id` now uses SipHash-2-4, replacing OpenSSL `RAND_bytes`; that change describes the variable as a non-security identifier. This snippet still uses it. If the nginx you run does not draw `$request_id` from a cryptographic RNG, generate the nonce another way and keep the header and the HTML on that same value.
 
 When the API is on another origin, set `CSP_CONNECT_SRC` (see the top of this file) and regenerate the snippet before reloading nginx:
 
@@ -89,6 +93,8 @@ add_header X-Content-Type-Options "nosniff" always;
 add_header X-Frame-Options "DENY" always;
 add_header Referrer-Policy "no-referrer" always;
 
+# No add_header in this location. /assets/* is served here and must stay cacheable.
+# A missing file is an internal redirect to /index.html, which csp.conf marks no-store.
 location / {
     try_files $uri $uri/ /index.html;
 }
@@ -127,9 +133,9 @@ If Laravel itself returns the SPA HTML, `app/Http/Middleware/SecurityHeaders.php
 Log in, check `/today`, complete an item, confirm the token card matches `/locker`.
 ## Production checklist
 - `APP_DEBUG=false`, a fresh `APP_KEY` (`php artisan key:generate --show`), and a dedicated MySQL user (not `root`) with rights on the app database only.
-- `TRUSTED_PROXIES=*` (or a comma list of load-balancer IPs) when the app sits behind a proxy, so HTTPS and client IPs are detected correctly.
+- Leave `TRUSTED_PROXIES` blank unless the app sits behind a proxy. Then set it to the real proxy or load-balancer IPs, comma-separated. `*` trusts a spoofed `X-Forwarded-For`.
 - **Mail:** `MAIL_MAILER=log` only writes reset links to the log. Set a real mailer (`MAIL_MAILER=smtp` plus `MAIL_*`) or password reset will not reach you.
 - Run `php artisan optimize` after each deploy. Back up the database and the file disk.
-- API responses carry `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Cache-Control: no-store` (see `app/Http/Middleware/SecurityHeaders.php`). The SPA document also carries `Content-Security-Policy` (nginx snippet above, and the middleware when the response is HTML). Split-host deploys set `CSP_CONNECT_SRC` to the API origin for both Laravel and the frontend build, and `deploy/nginx/csp.conf` was regenerated with `php artisan csp:nginx`.
+- API responses carry `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Cache-Control: no-store` (see `app/Http/Middleware/SecurityHeaders.php`). The SPA document (`index.html`, including the `try_files` fallback) also carries `Content-Security-Policy` and `Cache-Control: no-store`. `/assets/*` does not get `no-store`. Split-host deploys set `CSP_CONNECT_SRC` to the API origin for both Laravel and the frontend build, and `deploy/nginx/csp.conf` was regenerated with `php artisan csp:nginx`.
 - `deploy/php/production.ini` is loaded (`upload_max_filesize=12M`, `post_max_size=12M`, `expose_php=Off`) and nginx `client_max_body_size` is at least `12M`.
 - `.env` is git-ignored: never commit it, and rotate any database password that has been shared.

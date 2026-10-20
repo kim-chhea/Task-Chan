@@ -7,7 +7,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { apiOrigin, connectOrigins, contentSecurityPolicy, CSP_NONCE_PLACEHOLDER } from './cspPolicy.mjs';
+import { apiOrigin, connectOrigins, contentSecurityPolicy, CSP_NONCE_PLACEHOLDER, isSpaDocument } from './cspPolicy.mjs';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
@@ -74,11 +74,10 @@ function spaContentSecurityPolicy(connectSrc: string | undefined, apiUrl: string
                 }
 
                 const nonce = randomBytes(16).toString('base64url');
-                res.setHeader('Content-Security-Policy', contentSecurityPolicy({ connectSrc: shared, nonce, delivery: 'header' }));
+                const policy = contentSecurityPolicy({ connectSrc: shared, nonce, delivery: 'header' });
 
-                const last = pathname.split('/').pop() ?? '';
-                const isDocument = (req.method === 'GET' || req.method === 'HEAD') && !last.includes('.');
-                if (!isDocument) {
+                if (!isSpaDocument(pathname, req.method ?? 'GET')) {
+                    res.setHeader('Content-Security-Policy', policy);
                     next();
                     return;
                 }
@@ -93,6 +92,8 @@ function spaContentSecurityPolicy(connectSrc: string | undefined, apiUrl: string
 
                 const body = html.replaceAll(CSP_NONCE_PLACEHOLDER, nonce);
                 res.statusCode = 200;
+                res.setHeader('Content-Security-Policy', policy);
+                res.setHeader('Cache-Control', 'no-store');
                 res.setHeader('Content-Type', 'text/html; charset=utf-8');
                 res.setHeader('Content-Length', Buffer.byteLength(body));
                 res.end(req.method === 'HEAD' ? undefined : body);

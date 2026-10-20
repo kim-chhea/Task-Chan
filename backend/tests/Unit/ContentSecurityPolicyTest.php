@@ -49,6 +49,25 @@ it('uses CSP_CONNECT_SRC for connect-src in the header and the nginx snippet', f
         ->and(ContentSecurityPolicy::nginxSnippet())->toContain('https://files.example.com:8443');
 });
 
+it('sends no-store and the csp on the html document only', function () {
+    config(['csp.connect_src' => '']);
+
+    $snippet = ContentSecurityPolicy::nginxSnippet();
+    preg_match('/location = \/index\.html \{(.+?)\n\}/s', $snippet, $location);
+    $block = $location[1] ?? '';
+    $outside = preg_replace('/location = \/index\.html \{.+?\n\}/s', '', $snippet);
+
+    expect($block)->toContain('add_header Cache-Control "no-store" always;')
+        ->and($block)->toContain('add_header Content-Security-Policy')
+        ->and($block)->toContain("style-src 'self' 'nonce-\$csp_nonce'")
+        ->and($block)->toContain('add_header X-Content-Type-Options "nosniff" always;')
+        ->and($block)->toContain('add_header X-Frame-Options "DENY" always;')
+        ->and($block)->toContain('add_header Referrer-Policy "no-referrer" always;')
+        ->and($outside)->not->toContain('add_header Cache-Control')
+        ->and($outside)->toContain('add_header Content-Security-Policy')
+        ->and($snippet)->toContain('gzip_static');
+});
+
 it('keeps the committed nginx snippet equal to an empty CSP_CONNECT_SRC', function () {
     config(['csp.connect_src' => '']);
 

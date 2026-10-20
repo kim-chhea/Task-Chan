@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiOrigin, connectOrigins, contentSecurityPolicy, CSP_NONCE_PLACEHOLDER } from '../../cspPolicy.mjs';
+import { apiOrigin, connectOrigins, contentSecurityPolicy, CSP_NONCE_PLACEHOLDER, isSpaDocument } from '../../cspPolicy.mjs';
 
 describe('contentSecurityPolicy', () => {
     it('keeps fonts and styles on self and covers a same-origin API', () => {
@@ -35,6 +35,17 @@ describe('contentSecurityPolicy', () => {
         expect(directive(policy, 'style-src')).toBe(`'self' 'nonce-${CSP_NONCE_PLACEHOLDER}'`);
         expect(directive(policy, 'style-src')).not.toContain('unsafe-inline');
         expect(policy).not.toContain('frame-ancestors');
+    });
+
+    it('marks the html document no-store and leaves /assets cacheable', () => {
+        for (const path of ['/', '/login', '/index.html', '/items/1']) {
+            expect(isSpaDocument(path)).toBe(true);
+        }
+        expect(isSpaDocument('/index.html', 'HEAD')).toBe(true);
+        expect(isSpaDocument('/assets/index-abc.js')).toBe(false);
+        expect(isSpaDocument('/assets/NotesEditor.css')).toBe(false);
+        expect(isSpaDocument('/favicon.svg')).toBe(false);
+        expect(isSpaDocument('/', 'POST')).toBe(false);
     });
 
     it('rejects the old VITE_API_URL-only call', () => {
