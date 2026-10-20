@@ -27,7 +27,7 @@ class RegisteredUserController extends Controller
 
         // Two simultaneous requests must not both pass the "no user yet" check.
         $lock = Cache::lock('register-first-user', 10);
-        abort_unless($lock->get(), 429);
+        abort_unless($lock->get(), 429, 'Registration is busy. Try again.');
 
         try {
             abort_if(User::query()->exists(), 403, 'Registration is closed.');
