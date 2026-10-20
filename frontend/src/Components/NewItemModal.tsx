@@ -26,7 +26,7 @@ const QUICK_DATES: { label: string; days: number | null }[] = [
     { label: 'No date', days: null },
 ];
 
-const field = 'min-h-[46px] w-full rounded-[11px] border-2 border-ink bg-white px-3.5 text-base text-ink focus:border-accent focus:outline-none focus:ring-0';
+const field = 'min-h-[46px] w-full rounded-[11px] border-2 border-ink bg-white px-3.5 text-base text-ink focus:border-accent focus:outline-hidden focus:ring-0';
 const choice = (on: boolean) =>
     `min-h-[42px] rounded-[10px] border-2 border-ink px-3.5 text-sm font-bold transition ${on ? 'bg-ink text-white' : 'bg-white text-ink hover:bg-paper-2'}`;
 

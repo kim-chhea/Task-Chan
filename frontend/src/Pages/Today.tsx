@@ -152,7 +152,7 @@ export default function Today({ today, groups, week, weekRange, weekDone }: Prop
                             onKeyDown={onKey}
                             placeholder="Ticket from DGB, due Friday"
                             autoComplete="off"
-                            className="min-w-0 grow border-0 bg-transparent p-0 text-lg font-medium text-ink focus:outline-none focus:ring-0"
+                            className="min-w-0 grow border-0 bg-transparent p-0 text-lg font-medium text-ink focus:outline-hidden focus:ring-0"
                         />
                         <button type="button" onClick={add} disabled={busy || !text.trim()} className="min-h-[46px] rounded-[11px] border-2 border-ink bg-accent px-5 text-sm font-bold text-white disabled:opacity-60">
                             Add ↵

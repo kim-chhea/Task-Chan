@@ -38,9 +38,9 @@ In dev the browser only talks to Vite (5173); it proxies `/api` and `/sanctum` t
 - Errors are always JSON; validation errors are 422 `{ errors: { field: [..] } }`.
 
 ## Production
-Serve `frontend/dist` (static, SPA fallback to `index.html`) and the API on the **same registrable domain** (e.g. `app.example.com` + `api.example.com`).
-- backend: `FRONTEND_URL`, `SANCTUM_STATEFUL_DOMAINS=app.example.com`, `SESSION_DOMAIN=.example.com`, `SESSION_SECURE_COOKIE=true`, `CORS_ALLOWED_ORIGINS=https://app.example.com`
-- frontend build: `VITE_API_URL=https://api.example.com`
+Serve `frontend/dist` (static, SPA fallback to `index.html`) and the API on the **same host** when you can (`backend/DEPLOY.md`). The browser then calls `/api` on the SPA origin, `VITE_API_URL` stays empty, and the CSP `connect-src 'self'` is the API origin.
+- backend: `FRONTEND_URL`, `SANCTUM_STATEFUL_DOMAINS` (the SPA host), `SESSION_DOMAIN`, `SESSION_SECURE_COOKIE=true`, `CORS_ALLOWED_ORIGINS`
+- Split hosts on one registrable domain (for example `app.example.com` and `api.example.com`): `VITE_API_URL=https://api.example.com`. The production build adds that origin to `connect-src`. PHP limits and the nginx CSP snippet are in `backend/DEPLOY.md`.
 
 ## Migration status
 Done: the backend is API-only and the frontend is a standalone SPA. `frontend/src/runtime/index.tsx` is the app runtime (page host, `router`, `useForm`, `Link`, `usePage`, `Head`).
