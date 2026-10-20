@@ -193,7 +193,7 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
                                     type="button"
                                     onClick={() => removeSub(s)}
                                     aria-label={`Delete sub-task ${s.title}`}
-                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-base text-ink-3 opacity-100 hover:text-pink focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-base text-ink-3 hover:text-pink focus-visible:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                                 >
                                     <span aria-hidden="true">✕</span>
                                 </button>
@@ -211,7 +211,7 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
                                 <span aria-hidden="true">📎</span>
                                 <a href={apiUrl(a.url)} className="grow truncate font-semibold">{a.name}</a>
                                 <span className="font-mono text-xs text-ink-3">{fileSize(a.size)}</span>
-                                <button type="button" aria-label={`Delete ${a.name}`} onClick={async () => { try { await api('DELETE', `/attachments/${a.id}`); reload(['item']); } catch (e) { fail(e); } }} className="text-ink-4 hover:text-pink">✕</button>
+                                <button type="button" aria-label={`Delete ${a.name}`} onClick={async () => { try { await api('DELETE', `/attachments/${a.id}`); reload(['item']); } catch (e) { fail(e); } }} className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-base text-ink-3 hover:text-pink">✕</button>
                             </div>
                         ))}
                         <div

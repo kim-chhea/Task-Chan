@@ -48,7 +48,7 @@ const item = {
     reward: 10,
     notes: null,
     sub_tasks: [{ id: 3, title: 'Outline the sections', done: false }],
-    attachments: [],
+    attachments: [{ id: 9, name: 'brief.pdf', size: 1200, mime: 'application/pdf', url: '/api/attachments/9' }],
     master_record: null,
     custom: {},
 };
@@ -93,12 +93,21 @@ describe('item attachments', () => {
         return input;
     }
 
-    it('names the sub-task delete control and keeps it available before the md breakpoint', () => {
+    it('hides the sub-task delete control only on devices that can hover', () => {
         renderShow();
         const button = screen.getByRole('button', { name: 'Delete sub-task Outline the sections' });
-        expect(button.className).toContain('opacity-100');
-        expect(button.className).toContain('md:opacity-0');
-        expect(button.className).toContain('focus:opacity-100');
+        expect(button.className).toContain('[@media(hover:hover)]:opacity-0');
+        expect(button.className).toContain('[@media(hover:hover)]:group-hover:opacity-100');
+        expect(button.className).toContain('focus-visible:opacity-100');
+        expect(button.className).not.toContain('md:opacity-0');
+    });
+
+    it('gives the file delete control a 32px hit area', () => {
+        renderShow();
+        const button = screen.getByRole('button', { name: 'Delete brief.pdf' });
+        expect(button.className).toContain('h-8');
+        expect(button.className).toContain('w-8');
+        expect(button.className).toContain('text-ink-3');
     });
 
     it('advertises the extensions the server allows', () => {
