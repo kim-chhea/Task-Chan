@@ -29,10 +29,13 @@ use Illuminate\Support\Facades\Route;
 // Public: app state for the shell (user is null when logged out) and the auth endpoints.
 Route::get('bootstrap', BootstrapController::class);
 
+// Six per minute, on its own limiter. Inside the 60/min group it would share that counter and trip early.
+Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
+    ->middleware('throttle:6,1');
+
 Route::middleware('throttle:60,1')->group(function () {
     Route::post('register', [RegisteredUserController::class, 'store']);
     Route::post('login', [AuthenticatedSessionController::class, 'store']);
-    Route::post('forgot-password', [PasswordResetLinkController::class, 'store']);
     Route::post('reset-password', [NewPasswordController::class, 'store']);
 });
 
