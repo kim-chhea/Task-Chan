@@ -10,6 +10,25 @@ interface Props {
 const itemClass =
     'flex min-h-[44px] w-full items-center rounded-[10px] px-3 text-left text-sm font-semibold text-ink no-underline hover:bg-paper-2';
 
+/** A click here will focus this element, or a focusable parent such as a button around a label. */
+function clickMovesFocus(target: EventTarget | null): boolean {
+    let node: Node | null = target instanceof Node ? target : null;
+    while (node) {
+        if (node instanceof HTMLElement && takesClickFocus(node)) return true;
+        node = node.parentElement;
+    }
+    return false;
+}
+
+function takesClickFocus(el: HTMLElement): boolean {
+    if (el.hasAttribute('disabled')) return false;
+    if (el.isContentEditable) return true;
+    // tabIndex is 0 for links, buttons, and inputs; -1 for plain divs.
+    // An explicit tabindex, including -1, is still focused by a click.
+    if (el.tabIndex >= 0) return true;
+    return el.hasAttribute('tabindex');
+}
+
 /** Account control for the mobile header: Profile and Log out. */
 export default function AccountMenu({ name, onLogout }: Props) {
     const [open, setOpen] = useState(false);
@@ -38,7 +57,10 @@ export default function AccountMenu({ name, onLogout }: Props) {
             buttonRef.current?.focus();
         };
         const onPointer = (e: PointerEvent) => {
-            if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+            if (rootRef.current?.contains(e.target as Node)) return;
+            setOpen(false);
+            // A click on another control focuses that control. Don't pull focus back.
+            if (!clickMovesFocus(e.target)) buttonRef.current?.focus();
         };
         document.addEventListener('keydown', onKey);
         document.addEventListener('pointerdown', onPointer);

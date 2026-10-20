@@ -78,11 +78,35 @@ describe('AccountMenu', () => {
         expect(document.activeElement).toBe(trigger);
     });
 
-    it('closes when clicking outside', () => {
-        renderMenu();
+    it('closes when clicking outside and returns focus when that spot is not a control', () => {
+        render(
+            <MemoryRouter>
+                <AccountMenu name="Mina Sato" onLogout={vi.fn()} />
+                <div data-testid="blank">Notes</div>
+            </MemoryRouter>,
+        );
+        const trigger = button();
+        fireEvent.click(trigger);
+        fireEvent.pointerDown(screen.getByTestId('blank'));
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+        expect(document.activeElement).toBe(trigger);
+    });
+
+    it('does not steal focus when the outside click lands on another control', () => {
+        render(
+            <MemoryRouter>
+                <AccountMenu name="Mina Sato" onLogout={vi.fn()} />
+                <button type="button">
+                    Next <span data-testid="next-label">page</span>
+                </button>
+            </MemoryRouter>,
+        );
         fireEvent.click(button());
-        fireEvent.pointerDown(document.body);
+        const next = screen.getByRole('button', { name: 'Next page' });
+        next.focus();
+        fireEvent.pointerDown(screen.getByTestId('next-label'));
         expect(button().getAttribute('aria-expanded')).toBe('false');
+        expect(document.activeElement).toBe(next);
     });
 
     it('moves between items with the arrow keys', () => {
