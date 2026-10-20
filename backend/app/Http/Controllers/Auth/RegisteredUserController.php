@@ -17,7 +17,7 @@ class RegisteredUserController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
-        abort_if(User::query()->exists(), 404); // single-user app
+        abort_if(User::query()->exists(), 403, 'Registration is closed.');
 
         $request->validate([
             'name' => 'required|string|max:255',
@@ -30,7 +30,7 @@ class RegisteredUserController extends Controller
         abort_unless($lock->get(), 429);
 
         try {
-            abort_if(User::query()->exists(), 404);
+            abort_if(User::query()->exists(), 403, 'Registration is closed.');
 
             $user = User::create([
                 'name' => $request->name,

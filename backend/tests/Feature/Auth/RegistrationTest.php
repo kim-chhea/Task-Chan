@@ -14,6 +14,8 @@ test('the first user can register', function () {
 });
 
 test('registration closes once a user exists', function () {
+    config(['app.debug' => false]);
+
     User::factory()->create();
 
     $this->postJson('/api/register', [
@@ -21,5 +23,5 @@ test('registration closes once a user exists', function () {
         'email' => 'second@example.com',
         'password' => 'password',
         'password_confirmation' => 'password',
-    ])->assertNotFound();
+    ])->assertForbidden()->assertExactJson(['message' => 'Registration is closed.']);
 });
