@@ -214,7 +214,19 @@ it('returns 422 with the real balance when an undo would go negative', function 
 });
 
 it('answers unknown API paths with a JSON 404', function () {
-    $this->actingAs($this->user)->getJson('/api/nope')->assertNotFound()->assertJsonStructure(['message']);
+    $this->actingAs($this->user)->getJson('/api/nope')
+        ->assertNotFound()
+        ->assertExactJson(['message' => 'Not found.']);
+});
+
+it('does not leak the model when an attachment is missing', function () {
+    $this->actingAs($this->user)->getJson('/api/attachments/999999')
+        ->assertNotFound()
+        ->assertExactJson(['message' => 'Not found.']);
+
+    $this->deleteJson('/api/attachments/999999')
+        ->assertNotFound()
+        ->assertExactJson(['message' => 'Not found.']);
 });
 
 it('serves the calendar in month, week and day views', function () {
