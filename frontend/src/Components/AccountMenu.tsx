@@ -35,6 +35,8 @@ export default function AccountMenu({ name, onLogout }: Props) {
     const rootRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
+    /** Set on pointerdown. Restored on pointerup, after mousedown has moved focus. */
+    const restoreFocus = useRef(false);
     const menuId = useId();
     const { pathname } = useLocation();
     const pathRef = useRef(pathname);
@@ -46,6 +48,28 @@ export default function AccountMenu({ name, onLogout }: Props) {
         setOpen(false);
     }, [pathname]);
 
+    // pointerup is after mousedown. A non-focusable mousedown moves focus to the body,
+    // so focusing the button on pointerdown does not stick.
+    useEffect(() => {
+        const onUp = () => {
+            if (!restoreFocus.current) return;
+            restoreFocus.current = false;
+            const active = document.activeElement;
+            const landedOnControl = active instanceof HTMLElement
+                && active !== document.body
+                && active !== document.documentElement
+                && !rootRef.current?.contains(active)
+                && clickMovesFocus(active);
+            if (!landedOnControl) buttonRef.current?.focus();
+        };
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onUp);
+        return () => {
+            document.removeEventListener('pointerup', onUp);
+            document.removeEventListener('pointercancel', onUp);
+        };
+    }, []);
+
     useEffect(() => {
         if (!open) return;
         menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
@@ -54,13 +78,14 @@ export default function AccountMenu({ name, onLogout }: Props) {
             if (e.key !== 'Escape') return;
             e.preventDefault();
             setOpen(false);
+            restoreFocus.current = false;
             buttonRef.current?.focus();
         };
         const onPointer = (e: PointerEvent) => {
             if (rootRef.current?.contains(e.target as Node)) return;
             setOpen(false);
             // A click on another control focuses that control. Don't pull focus back.
-            if (!clickMovesFocus(e.target)) buttonRef.current?.focus();
+            restoreFocus.current = !clickMovesFocus(e.target);
         };
         document.addEventListener('keydown', onKey);
         document.addEventListener('pointerdown', onPointer);

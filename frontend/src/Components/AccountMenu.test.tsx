@@ -78,7 +78,17 @@ describe('AccountMenu', () => {
         expect(document.activeElement).toBe(trigger);
     });
 
-    it('closes when clicking outside and returns focus when that spot is not a control', () => {
+    /** pointerdown, mousedown, pointerup, click. `onMouseDown` stands in for the browser focus change. */
+    function clickOutside(target: Element, onMouseDown: () => void) {
+        fireEvent.pointerDown(target);
+        target.addEventListener('mousedown', onMouseDown);
+        fireEvent.mouseDown(target);
+        target.removeEventListener('mousedown', onMouseDown);
+        fireEvent.pointerUp(target);
+        fireEvent.click(target);
+    }
+
+    it('returns focus after a full click on a non-focusable spot', () => {
         render(
             <MemoryRouter>
                 <AccountMenu name="Mina Sato" onLogout={vi.fn()} />
@@ -87,7 +97,9 @@ describe('AccountMenu', () => {
         );
         const trigger = button();
         fireEvent.click(trigger);
-        fireEvent.pointerDown(screen.getByTestId('blank'));
+        clickOutside(screen.getByTestId('blank'), () => {
+            (document.activeElement as HTMLElement).blur();
+        });
         expect(trigger.getAttribute('aria-expanded')).toBe('false');
         expect(document.activeElement).toBe(trigger);
     });
@@ -103,8 +115,9 @@ describe('AccountMenu', () => {
         );
         fireEvent.click(button());
         const next = screen.getByRole('button', { name: 'Next page' });
-        next.focus();
-        fireEvent.pointerDown(screen.getByTestId('next-label'));
+        clickOutside(screen.getByTestId('next-label'), () => {
+            next.focus();
+        });
         expect(button().getAttribute('aria-expanded')).toBe('false');
         expect(document.activeElement).toBe(next);
     });
