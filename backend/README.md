@@ -12,7 +12,7 @@ JSON API of Task-Chan (Laravel 13 + MySQL 8 + Sanctum). The React app is in `../
 5. `php artisan migrate:fresh --seed`
 6. `pwsh scripts/serve.ps1` (or `php artisan serve`). The API is at http://localhost:8000/api; start the frontend from `../frontend`.
 
-**File uploads:** the app accepts 10 MB per file, but PHP defaults to 2 MB (Herd's `php.ini` too). `php artisan serve`, `composer dev`, and `scripts/serve.ps1` load `php.ini` (`upload_max_filesize=12M`, `post_max_size=12M`). In Herd raise *Max file upload size* in its PHP settings; in production set the same 12M limits.
+**File uploads:** the app accepts 10 MB per file, but PHP defaults to 2 MB (Herd's `php.ini` too). `php artisan serve`, `composer dev`, and `scripts/serve.ps1` load `php.ini` (`upload_max_filesize=12M`, `post_max_size=12M`). In Herd raise *Max file upload size* in its PHP settings; in production use `deploy/php/production.ini` (`upload_max_filesize=12M`, `post_max_size=12M`).
 
 Seeded login: `demo@worktracker.test` / `password`. Registration is open only until the first user exists.
 

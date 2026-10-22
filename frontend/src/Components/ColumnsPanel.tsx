@@ -81,7 +81,7 @@ export default function ColumnsPanel({ selected, fields }: Props) {
                         <h3 className="font-mono text-[11px] uppercase tracking-wider text-ink-3">Shown, in order</h3>
                         {sel.map((key, i) => (
                             <div key={key} className="flex items-center gap-2 rounded-[10px] border-2 border-ink bg-white px-3 py-2">
-                                <input type="checkbox" checked disabled={key === 'title'} onChange={() => save(toggleColumn(sel, key))} aria-label={`Show ${label(key)}`} className="h-4 w-4 rounded border-2 border-ink text-accent focus:ring-accent" />
+                                <input type="checkbox" checked disabled={key === 'title'} onChange={() => save(toggleColumn(sel, key))} aria-label={`Show ${label(key)}`} className="h-4 w-4 rounded border-2 border-ink text-accent focus:ring-2 focus:ring-accent" />
                                 <span className="grow text-sm font-semibold">{label(key)}{key === 'title' && <span className="ml-2 text-xs font-normal text-ink-3">always shown</span>}</span>
                                 <button type="button" disabled={i === 0} onClick={() => save(moveColumn(sel, key, -1))} aria-label={`Move ${label(key)} up`} className="rounded px-1.5 text-ink-3 enabled:hover:text-ink disabled:opacity-30">↑</button>
                                 <button type="button" disabled={i === sel.length - 1} onClick={() => save(moveColumn(sel, key, 1))} aria-label={`Move ${label(key)} down`} className="rounded px-1.5 text-ink-3 enabled:hover:text-ink disabled:opacity-30">↓</button>

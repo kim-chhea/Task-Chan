@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../../tailwind.config.js";
 
 :root {
     --ink: #15161d;
@@ -13,6 +12,18 @@
 }
 
 @layer base {
+    /* Tailwind v4 defaults border color to currentColor and buttons to cursor: default. Keep the v3 look. */
+    *,
+    ::after,
+    ::before,
+    ::backdrop,
+    ::file-selector-button {
+        border-color: var(--color-gray-200, currentColor);
+    }
+    button:not(:disabled),
+    [role="button"]:not(:disabled) {
+        cursor: pointer;
+    }
     html {
         background: var(--bg);
         color: var(--ink);
