@@ -20,7 +20,7 @@ import {
     type ReactNode,
 } from 'react';
 import { Link as RouterLink, Navigate, matchPath, useLocation, type NavigateFunction } from 'react-router-dom';
-import { ApiError, UNAUTHENTICATED_EVENT, api } from '@/lib/api';
+import { ApiError, UNAUTHENTICATED_EVENT, api, apiProblem, type ApiProblem } from '@/lib/api';
 
 type Method = 'get' | 'post' | 'put' | 'patch' | 'delete';
 type Props = Record<string, any>;
@@ -34,6 +34,14 @@ interface RouteCtx {
     params: Record<string, string | undefined>;
     search: URLSearchParams;
     shared: Props;
+}
+
+/**
+ * Email on `{FRONTEND_URL}/reset-password/{token}?email={rawurlencoded}`.
+ * `URLSearchParams` decodes `%40` and `%20` from PHP's `rawurlencode` once.
+ */
+export function resetEmail(search: URLSearchParams): string {
+    return search.get('email') ?? '';
 }
 
 interface ScreenDef {
@@ -70,11 +78,11 @@ const SCREENS: ScreenDef[] = [
         path: '/reset-password/:token',
         component: 'Auth/ResetPassword',
         access: 'guest',
-        props: (c) => ({ token: c.params.token, email: c.search.get('email') ?? '' }),
+        props: (c) => ({ token: c.params.token ?? '', email: resetEmail(c.search) }),
     },
 ];
 
-const pageModules = import.meta.glob<PageModule>('../Pages/**/*.tsx');
+const pageModules = import.meta.glob<PageModule>(['../Pages/**/*.tsx', '!../Pages/**/*.test.tsx']);
 
 /** Ziggy replacement: route names used by the auth/profile pages mapped to URL paths (also the API paths). */
 const ROUTE_PATHS: Record<string, string> = {
@@ -151,7 +159,7 @@ export interface VisitOptions {
     replace?: boolean;
     headers?: Record<string, string>;
     onSuccess?: (page?: unknown) => void;
-    onError?: (errors: Record<string, string>) => void;
+    onError?: (errors: Record<string, string>, problem?: ApiProblem) => void;
     onFinish?: () => void;
 }
 
@@ -161,9 +169,6 @@ const toQuery = (data?: Record<string, unknown>) => {
     const s = q.toString();
     return s ? `?${s}` : '';
 };
-
-const flattenErrors = (errors: unknown): Record<string, string> =>
-    Object.fromEntries(Object.entries((errors ?? {}) as Record<string, string[] | string>).map(([k, v]) => [k, Array.isArray(v) ? v[0] : v]));
 
 /** What used to be a server redirect after a mutation. */
 async function afterMutation(method: Method, url: string, res: any) {
@@ -180,8 +185,10 @@ async function afterMutation(method: Method, url: string, res: any) {
     }
     if (path === '/forgot-password' || path === '/email/verification-notification') return set({ status: res?.status ?? null });
     if (path === '/reset-password') {
-        set({ status: res?.status ?? null, carry: true });
-        return go('/login');
+        const message = typeof res?.status === 'string' ? res.status : null;
+        set({ status: message, carry: true });
+        // History state keeps the sentence if the one-shot store flag is cleared on the way to /login.
+        return navigateFn?.('/login', message ? { state: { status: message } } : undefined);
     }
     if (path === '/confirm-password') return go('/today');
     if (path === '/master-records' && method === 'post') return go(`/master-records/${res.id}`);
@@ -203,8 +210,9 @@ async function submit(method: Method, url: string, data: unknown, opts: VisitOpt
             await refreshShared().catch(() => undefined);
             navigateFn?.('/login');
         }
-        if (!e.data.errors) set({ error: e.message });
-        opts.onError?.(flattenErrors(e.data.errors ?? { form: e.message }));
+        const problem = apiProblem(e);
+        if (Object.keys(problem.fields).length === 0) set({ error: problem.message });
+        opts.onError?.(Object.keys(problem.fields).length ? problem.fields : { form: problem.message }, problem);
     } finally {
         opts.onFinish?.();
         emit('finish');
@@ -306,9 +314,9 @@ export function useForm<T extends Record<string, any>>(initial: T) {
                 timer.current = setTimeout(() => setRecentlySuccessful(false), 2000);
                 opts.onSuccess?.(p);
             },
-            onError: (e) => {
+            onError: (e, problem) => {
                 setErrors(e as Partial<Record<keyof T, string>>);
-                opts.onError?.(e);
+                opts.onError?.(e, problem);
             },
             onFinish: () => {
                 setProcessing(false);
@@ -438,7 +446,9 @@ export function AppHost({ navigate }: { navigate: NavigateFunction }) {
     if (errorStatus) return <Fallback status={errorStatus} />;
     if (!page || !Module || Module.name !== page.component || page.component !== screen.component) return null;
 
-    const props = { ...shared, ...page.props, ...(status ? { status } : {}) };
+    const stateStatus = location.state && typeof location.state === 'object' ? (location.state as { status?: unknown }).status : undefined;
+    const flash = status || (typeof stateStatus === 'string' ? stateStatus : null);
+    const props = { ...shared, ...page.props, ...(flash ? { status: flash } : {}) };
     const { Comp } = Module;
     const el = <Comp key={location.pathname} {...props} />;
 

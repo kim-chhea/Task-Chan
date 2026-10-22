@@ -128,7 +128,7 @@ function Day({ date, index, cols, minH, showWeekday, inMonth, isToday, lastRow, 
             ref={setNodeRef}
             className={`flex ${minH} min-w-0 flex-col gap-1.5 p-2.5 transition-colors ${index % cols !== cols - 1 ? 'border-r-[1.5px] border-paper-3' : ''} ${!lastRow ? 'border-b-[1.5px] border-paper-3' : ''} ${isOver ? 'bg-accent-soft outline-dashed outline-[2.5px] -outline-offset-[5px] outline-accent' : !inMonth ? 'bg-[#F7F7FA]' : ''}`}
         >
-            <span className={`inline-flex h-7 min-w-7 items-center justify-center self-start rounded-full px-1 text-[13px] font-bold ${isToday ? 'today-pulse border-2 border-ink bg-accent text-white' : inMonth ? '' : 'text-[#9A9DAD]'}`} aria-label={isToday ? `${n}, today` : undefined}>
+            <span className={`inline-flex h-7 min-w-7 items-center justify-center self-start rounded-full px-1 text-[13px] font-bold ${isToday ? 'today-pulse border-2 border-ink bg-accent text-white' : inMonth ? '' : 'text-ink-3'}`} aria-label={isToday ? `${n}, today` : undefined}>
                 {showWeekday ? shortDay(date) : n}
             </span>
             {items.map((it) => <DraggableChip key={it.id} item={it} landed={landed === it.id} />)}
