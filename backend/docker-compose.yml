@@ -1,7 +1,9 @@
 services:
   mysql:
     image: mysql:8.0
-    ports: ["3306:3306"]
+    # Host port 3307 matches DB_PORT in .env.example and scripts/mysql-local.ps1.
+    # The server inside the container still listens on 3306.
+    ports: ["3307:3306"]
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
       MYSQL_DATABASE: work_tracker

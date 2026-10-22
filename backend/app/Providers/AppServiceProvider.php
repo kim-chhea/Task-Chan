@@ -9,6 +9,7 @@ use App\Models\MasterRecord;
 use App\Policies\CustomFieldPolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\MasterRecordPolicy;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Console\Application as ArtisanApplication;
 use Illuminate\Foundation\Console\ServeCommand as FrameworkServeCommand;
 use Illuminate\Support\Facades\Gate;
@@ -28,6 +29,14 @@ class AppServiceProvider extends ServiceProvider
         // The request worker is a child process, so php.ini has to be on that command line.
         ArtisanApplication::starting(function () {
             $this->app->singleton(FrameworkServeCommand::class, fn () => new ServeCommand);
+        });
+
+        // The API has no password.reset route. The link in the email opens the SPA.
+        ResetPassword::createUrlUsing(function (object $notifiable, string $token): string {
+            $frontend = rtrim((string) config('app.frontend_url'), '/');
+            $email = rawurlencode($notifiable->getEmailForPasswordReset());
+
+            return "{$frontend}/reset-password/{$token}?email={$email}";
         });
 
         Gate::policy(Item::class, ItemPolicy::class);
