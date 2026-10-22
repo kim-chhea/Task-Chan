@@ -1,5 +1,6 @@
 import { Link, router, usePage } from '@/runtime';
 import { useEffect, useState, type ReactNode } from 'react';
+import AccountMenu from '@/Components/AccountMenu';
 import NewItemModal from '@/Components/NewItemModal';
 import { onOpenNewItem, openNewItem } from '@/lib/newItem';
 import { Coin } from '@/Components/ui/TokenPill';
@@ -46,6 +47,8 @@ function Shell({ children }: { children: ReactNode }) {
     const { auth } = usePage<PageProps>().props;
     const [newOpen, setNewOpen] = useState(false);
     useEffect(() => onOpenNewItem(() => setNewOpen(true)), []);
+    const logout = () => router.post('/logout');
+    const onProfile = path === '/profile' || path.startsWith('/profile/');
 
     return (
         <div className="grid min-h-screen grid-cols-1 bg-paper font-sans text-ink md:grid-cols-[236px_minmax(0,1fr)]">
@@ -76,20 +79,36 @@ function Shell({ children }: { children: ReactNode }) {
                     })}
                 </nav>
                 <TokenCard />
-                <button
-                    type="button"
-                    onClick={() => router.post('/logout')}
-                    className="min-h-[42px] rounded-[10px] border-2 border-dashed border-ink text-[13px] font-semibold"
-                >
-                    Log out · {auth.user.name}
-                </button>
+                <div className="flex flex-col gap-1">
+                    <Link
+                        href="/profile"
+                        aria-current={onProfile ? 'page' : undefined}
+                        className={`nav-link flex min-h-[44px] items-center gap-2.5 rounded-[10px] px-3 text-sm font-semibold no-underline ${onProfile ? 'bg-ink text-white' : 'text-ink-2'}`}
+                    >
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                            <circle cx="12" cy="8" r="4" />
+                            <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />
+                        </svg>
+                        Profile
+                    </Link>
+                    <button
+                        type="button"
+                        onClick={logout}
+                        className="min-h-[44px] rounded-[10px] border-2 border-dashed border-ink text-[13px] font-semibold"
+                    >
+                        Log out · {auth.user.name}
+                    </button>
+                </div>
             </aside>
 
             {/* Mobile top bar + tab bar */}
-            <header className="flex items-center justify-between border-b-2.5 border-ink bg-white px-4 py-3 md:hidden">
+            <header className="flex items-center gap-2 border-b-2.5 border-ink bg-white px-3 py-2 md:hidden">
                 <span className="font-display">Task-Chan</span>
-                <button type="button" onClick={openNewItem} className="min-h-9 rounded-[10px] border-2 border-ink bg-accent px-3 text-[13px] font-bold text-white">+ New</button>
-                <Link href="/locker" className="flex items-center gap-1.5 font-display text-sm text-ink no-underline"><MobileBalance /></Link>
+                <div className="ml-auto flex items-center gap-2">
+                    <button type="button" onClick={openNewItem} className="min-h-11 rounded-[10px] border-2 border-ink bg-accent px-3 text-[13px] font-bold text-white">+ New</button>
+                    <Link href="/locker" className="flex min-h-11 items-center gap-1.5 font-display text-sm text-ink no-underline"><MobileBalance /></Link>
+                    <AccountMenu name={auth.user.name} onLogout={logout} />
+                </div>
             </header>
 
             <main id="main" className="relative flex min-w-0 flex-col gap-7 overflow-hidden px-4 pb-24 pt-6 md:px-14 md:pb-12 md:pt-9">
