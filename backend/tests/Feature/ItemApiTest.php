@@ -108,7 +108,11 @@ it('handles sub-tasks and links', function () {
 });
 
 it('registration is closed once a user exists', function () {
-    $this->postJson('/api/register', ['name' => 'x', 'email' => 'x@example.com', 'password' => 'password-123', 'password_confirmation' => 'password-123'])->assertNotFound();
+    config(['app.debug' => false]);
+
+    $this->postJson('/api/register', ['name' => 'x', 'email' => 'x@example.com', 'password' => 'password-123', 'password_confirmation' => 'password-123'])
+        ->assertForbidden()
+        ->assertExactJson(['message' => 'Registration is closed.']);
 });
 
 it('registration works for the very first user and grants the free locker items', function () {
@@ -190,4 +194,3 @@ it('sends defensive headers on API responses', function () {
         ->assertHeader('X-Frame-Options', 'DENY')
         ->assertHeader('Referrer-Policy', 'no-referrer');
 });
-
