@@ -1,5 +1,7 @@
 # Deploy
 
+GitHub Actions can deploy this app to a VPS. Read [`../docs/CI-CD.md`](../docs/CI-CD.md). If you use Laravel Cloud or Forge instead, keep the CI workflow and replace only the deploy job.
+
 The API (this directory) and the React app (`../frontend`) are served from the **same host** when you can. Browsers then call `/api` and `/sanctum` on the SPA's origin. Leave `VITE_API_URL` and `CSP_CONNECT_SRC` empty, and `connect-src 'self'` is the API origin.
 
 A split-host deploy (the SPA on `app.example.com`, the API on `api.example.com`) sets **one** value, `CSP_CONNECT_SRC=https://api.example.com`, in the Laravel environment and in the frontend build environment, and sets `VITE_API_URL` to that same origin. `CSP_CONNECT_SRC` is what `connect-src` uses in every place the browser can see:

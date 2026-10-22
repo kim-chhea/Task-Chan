@@ -7,7 +7,7 @@
 
 **New here? Start with [`LEARN.md`](LEARN.md)**, the full guide to the frontend and backend in simple words.
 
-Docs: [`backend/backend.md`](backend/backend.md) (backend logic in plain words), `backend/README.md`, `backend/DEPLOY.md`.
+Docs: [`backend/backend.md`](backend/backend.md) (backend logic in plain words), `backend/README.md`, `backend/DEPLOY.md`, [`docs/CI-CD.md`](docs/CI-CD.md) (CI and production deploy, in simple words).
 
 ## Run (dev)
 ```
@@ -41,6 +41,8 @@ In dev the browser only talks to Vite (5173); it proxies `/api` and `/sanctum` t
 Serve `frontend/dist` (static, SPA fallback to `index.html`) and the API on the **same host** when you can (`backend/DEPLOY.md`). The browser then calls `/api` on the SPA origin, `VITE_API_URL` and `CSP_CONNECT_SRC` stay empty, and the CSP `connect-src 'self'` is the API origin.
 - backend: `FRONTEND_URL`, `SANCTUM_STATEFUL_DOMAINS` (the SPA host), `SESSION_DOMAIN`, `SESSION_SECURE_COOKIE=true`, `CORS_ALLOWED_ORIGINS`
 - Split hosts on one registrable domain (for example `app.example.com` and `api.example.com`): set `CSP_CONNECT_SRC=https://api.example.com` for Laravel and for the frontend build, and set `VITE_API_URL` to that same origin. `CSP_CONNECT_SRC` is the one value copied into `connect-src` on the nginx header, the Laravel header, and the meta tag. The browser enforces the header and the meta tag together, so they have to match. Regenerate `backend/deploy/nginx/csp.conf` with `php artisan csp:nginx` after changing it. The meta tag cannot set `frame-ancestors`, so it is not a full replacement for the header. PHP limits and the rest of the nginx snippet are in `backend/DEPLOY.md`.
+
+Tests run on every pull request. A push to `main` deploys only after those tests pass and a reviewer approves the `production` environment. The setup is in [`docs/CI-CD.md`](docs/CI-CD.md).
 
 ## Migration status
 Done: the backend is API-only and the frontend is a standalone SPA. `frontend/src/runtime/index.tsx` is the app runtime (page host, `router`, `useForm`, `Link`, `usePage`, `Head`).
