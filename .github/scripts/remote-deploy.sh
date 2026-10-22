@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Runs on the VPS. Switches the live symlink only after migrate and config:cache.
-# If /up fails, points the symlink back at the previous release.
+# Runs on the VPS. Switches the live symlink only after migrate, config:cache,
+# and the 12M PHP ini install.
+# Does not run route:cache: routes/web.php registers GET / with a closure.
+# If php-fpm reload, nginx reload, view:clear, queue:restart, or /up fails,
+# points the symlink back and restores the previous 99-task-chan.ini.
 set -euo pipefail
 
 fail() {
@@ -120,26 +123,6 @@ if "$PHP_BIN" artisan list --raw 2>/dev/null | awk '{print $1}' | grep -qx 'csp:
   echo "Rewrote deploy/nginx/csp.conf from CSP_CONNECT_SRC."
 fi
 
-ini_src=""
-if [[ -f deploy/php/production.ini ]]; then
-  ini_src="deploy/php/production.ini"
-elif [[ -f php.ini ]]; then
-  # Dev upload limits. Safe to drop into conf.d. Do not pass this file to php -c:
-  # that would replace the whole PHP config and drop extensions such as pdo_mysql.
-  ini_src="php.ini"
-fi
-if [[ -n "$ini_src" && -n "${PHP_INI_DIR:-}" ]]; then
-  if [[ ! -d "$PHP_INI_DIR" ]]; then
-    fail "PHP_INI_DIR ${PHP_INI_DIR} does not exist on the server. The live symlink was not changed."
-  fi
-  if ! install -m 644 "$ini_src" "${PHP_INI_DIR}/99-task-chan.ini"; then
-    fail "Could not copy ${ini_src} to ${PHP_INI_DIR}/99-task-chan.ini. The live symlink was not changed."
-  fi
-  echo "Installed ${ini_src} to ${PHP_INI_DIR}/99-task-chan.ini."
-elif [[ -n "$ini_src" ]]; then
-  echo "PHP upload limits are in ${ini_src}. Set PHP_INI_DIR (for example /etc/php/8.4/fpm/conf.d) to install them, or copy the file into PHP's conf.d yourself."
-fi
-
 if ! "$PHP_BIN" artisan migrate --force; then
   fail "php artisan migrate --force failed. The live symlink was not changed. Database changes that already ran are not rolled back automatically."
 fi
@@ -152,47 +135,181 @@ if [[ ! -e public/storage ]]; then
   fi
 fi
 
+# route:cache is intentionally not run. routes/web.php registers GET / with a
+# closure, and `php artisan route:cache` cannot cache closures.
+
+ini_dest=""
+ini_stage=""
+ini_had_previous=0
+ini_installed=0
+swapped=0
+
+install_php_ini() {
+  local ini_src="${release_dir}/backend/deploy/php/production.ini"
+  if [[ -z "${PHP_INI_DIR:-}" ]]; then
+    fail "PHP_INI_DIR is not set. Set it to PHP-FPM's conf.d, for example /etc/php/8.4/fpm/conf.d. The live symlink was not changed."
+  fi
+  if [[ ! -d "$PHP_INI_DIR" ]]; then
+    fail "PHP_INI_DIR ${PHP_INI_DIR} does not exist on the server. The live symlink was not changed."
+  fi
+  if [[ ! -f "$ini_src" ]]; then
+    fail "Missing ${ini_src}. That file sets the 12M upload limits. The live symlink was not changed."
+  fi
+  if ! command -v sudo >/dev/null 2>&1; then
+    fail "sudo is not installed. The deploy runs sudo -n /usr/bin/install -m 644 to copy the PHP ini. The live symlink was not changed."
+  fi
+
+  ini_dest="${PHP_INI_DIR}/99-task-chan.ini"
+  ini_stage="${DEPLOY_PATH}/shared/php-ini"
+  mkdir -p "$ini_stage"
+  cp -- "$ini_src" "${ini_stage}/99-task-chan.ini.next"
+  chmod 644 "${ini_stage}/99-task-chan.ini.next"
+
+  if [[ -e "$ini_dest" ]]; then
+    if [[ ! -r "$ini_dest" ]]; then
+      fail "Cannot read ${ini_dest} to keep a copy for rollback. The live symlink was not changed."
+    fi
+    cp -a -- "$ini_dest" "${ini_stage}/99-task-chan.ini.previous"
+    ini_had_previous=1
+  else
+    rm -f -- "${ini_stage}/99-task-chan.ini.previous"
+    ini_had_previous=0
+  fi
+
+  if ! sudo -n /usr/bin/install -m 644 "${ini_stage}/99-task-chan.ini.next" "$ini_dest"; then
+    fail "Could not install the 12M PHP ini. The command is: sudo -n /usr/bin/install -m 644 ${ini_stage}/99-task-chan.ini.next ${ini_dest}. Add that exact command to sudoers. The live symlink was not changed."
+  fi
+  ini_installed=1
+  echo "Installed ${ini_src} to ${ini_dest} with sudo -n /usr/bin/install -m 644."
+}
+
+restore_php_ini() {
+  if ((ini_installed == 0)); then
+    return 0
+  fi
+  if ((ini_had_previous == 1)); then
+    if sudo -n /usr/bin/install -m 644 "${ini_stage}/99-task-chan.ini.previous" "$ini_dest"; then
+      echo "Restored the previous ${ini_dest}." >&2
+      return 0
+    fi
+    echo "Could not restore ${ini_dest} from ${ini_stage}/99-task-chan.ini.previous." >&2
+    return 1
+  fi
+  if sudo -n /usr/bin/rm -f "$ini_dest"; then
+    echo "Removed ${ini_dest}. There was no previous file." >&2
+    return 0
+  fi
+  echo "Could not remove ${ini_dest}." >&2
+  return 1
+}
+
+reload_php_fpm() {
+  local service
+  if [[ -n "${PHP_FPM_SERVICE:-}" ]]; then
+    if sudo -n /usr/bin/systemctl reload "$PHP_FPM_SERVICE"; then
+      echo "Reloaded ${PHP_FPM_SERVICE}."
+      return 0
+    fi
+    echo "Could not reload ${PHP_FPM_SERVICE}. Allow the deploy user this exact command: sudo -n /usr/bin/systemctl reload ${PHP_FPM_SERVICE}" >&2
+    return 1
+  fi
+  for service in php8.4-fpm php8.3-fpm php-fpm; do
+    if sudo -n /usr/bin/systemctl reload "$service"; then
+      echo "Reloaded ${service}."
+      return 0
+    fi
+  done
+  echo "Could not reload php-fpm. Set PHP_FPM_SERVICE to the unit name and allow that exact systemctl reload command in sudoers." >&2
+  return 1
+}
+
+reload_nginx() {
+  if sudo -n /usr/bin/systemctl reload nginx; then
+    echo "Reloaded nginx."
+    return 0
+  fi
+  echo "Could not reload nginx. Allow the deploy user this exact command: sudo -n /usr/bin/systemctl reload nginx" >&2
+  return 1
+}
+
+rollback_live() {
+  local reason=$1
+  echo "$reason" >&2
+  if ((swapped == 1)); then
+    if [[ -n "$previous" && -d "$previous" ]]; then
+      ln -sfn "$previous" "${current}.next"
+      mv -Tf "${current}.next" "$current"
+      echo "Rolled the live symlink back to ${previous}." >&2
+    else
+      rm -f -- "$current"
+      echo "No previous release. Removed the live symlink. The failed release is still in ${release_dir}." >&2
+    fi
+  fi
+  if ! restore_php_ini; then
+    echo "The PHP ini was not restored. Check ${ini_dest:-99-task-chan.ini}." >&2
+  fi
+  if ((swapped == 1)); then
+    if ! reload_php_fpm; then
+      echo "php-fpm did not reload after rollback." >&2
+    fi
+    if ! reload_nginx; then
+      echo "nginx did not reload after rollback." >&2
+    fi
+    if [[ -n "$previous" && -d "$previous/backend" ]]; then
+      if ! (cd "$previous/backend" && "$PHP_BIN" artisan queue:restart); then
+        echo "queue:restart after rollback failed." >&2
+      fi
+      if ! (cd "$previous/backend" && "$PHP_BIN" artisan view:clear); then
+        echo "view:clear after rollback failed." >&2
+      fi
+    fi
+  fi
+  return 0
+}
+
+install_php_ini
+
 previous=""
 if [[ -L "$current" ]]; then
   previous=$(readlink -f "$current" || true)
 fi
 
-reload_services() {
-  local service
-  local reloaded=0
-  if [[ -n "${PHP_FPM_SERVICE:-}" ]]; then
-    if sudo -n systemctl reload "$PHP_FPM_SERVICE"; then
-      echo "Reloaded ${PHP_FPM_SERVICE}."
-      reloaded=1
-    else
-      echo "Could not reload ${PHP_FPM_SERVICE}. Allow the deploy user: sudo -n systemctl reload ${PHP_FPM_SERVICE}" >&2
-    fi
-  else
-    for service in php8.4-fpm php8.3-fpm php-fpm; do
-      if sudo -n systemctl reload "$service" 2>/dev/null; then
-        echo "Reloaded ${service}."
-        reloaded=1
-        break
-      fi
-    done
-    if ((reloaded == 0)); then
-      echo "Could not reload php-fpm. Set PHP_FPM_SERVICE if the unit has another name." >&2
-    fi
-  fi
-  if sudo -n systemctl reload nginx 2>/dev/null; then
-    echo "Reloaded nginx."
-  fi
-}
-
-ln -sfn "$release_dir" "${current}.next"
-mv -Tf "${current}.next" "$current"
+if ! ln -sfn "$release_dir" "${current}.next" || ! mv -Tf "${current}.next" "$current"; then
+  rollback_live "Could not switch the live symlink."
+  fail "Deploy failed before the new release went live."
+fi
+swapped=1
 echo "Live symlink now points at ${release_dir}."
-reload_services
+
+if ! reload_php_fpm; then
+  rollback_live "php-fpm reload failed."
+  fail "Deploy failed because php-fpm did not reload. The previous release is live again."
+fi
+if ! reload_nginx; then
+  rollback_live "nginx reload failed."
+  fail "Deploy failed because nginx did not reload. The previous release is live again."
+fi
+if ! "$PHP_BIN" artisan view:clear; then
+  rollback_live "php artisan view:clear failed."
+  fail "Deploy failed on view:clear. The previous release is live again."
+fi
+if ! "$PHP_BIN" artisan queue:restart; then
+  rollback_live "php artisan queue:restart failed."
+  fail "Deploy failed on queue:restart. The previous release is live again."
+fi
 
 health_ok=0
 attempt=1
+health_code="000"
+health_body=$(mktemp "${release_dir}/health-body.XXXXXX")
 while ((attempt <= 5)); do
-  if curl --fail --silent --show-error --max-time 10 --output /dev/null "$HEALTHCHECK_URL"; then
+  health_code="000"
+  if health_code=$(curl --silent --show-error --max-time 10 --output "$health_body" --write-out '%{http_code}' "$HEALTHCHECK_URL"); then
+    :
+  else
+    health_code="000"
+  fi
+  if [[ "$health_code" == "200" && -f "$health_body" ]] && grep -F -q 'Application up' "$health_body"; then
     health_ok=1
     break
   fi
@@ -201,20 +318,19 @@ while ((attempt <= 5)); do
 done
 
 if ((health_ok == 0)); then
-  echo "Health check failed: GET ${HEALTHCHECK_URL}" >&2
-  if [[ -n "$previous" && -d "$previous" ]]; then
-    ln -sfn "$previous" "${current}.next"
-    mv -Tf "${current}.next" "$current"
-    reload_services || true
-    echo "Rolled the live symlink back to ${previous}." >&2
-  else
-    rm -f -- "$current"
-    echo "No previous release. Removed the live symlink. The failed release is still in ${release_dir}." >&2
+  echo "Health check failed: GET ${HEALTHCHECK_URL} returned HTTP ${health_code}." >&2
+  echo "The body must contain Laravel's text: Application up. A 200 by itself is not enough." >&2
+  if [[ -f "$health_body" ]]; then
+    echo "First lines of the response:" >&2
+    head -n 5 "$health_body" >&2 || true
   fi
+  rm -f -- "$health_body"
+  rollback_live "Health check failed: GET ${HEALTHCHECK_URL}"
   fail "Deploy failed the /up check."
 fi
+rm -f -- "$health_body"
 
-echo "Health check passed: GET ${HEALTHCHECK_URL}"
+echo "Health check passed: GET ${HEALTHCHECK_URL} returned Application up."
 
 releases_root="${DEPLOY_PATH}/releases"
 dirs=()

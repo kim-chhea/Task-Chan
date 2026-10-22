@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Production frontend build. CSP_CONNECT_SRC is unused until the CSP change lands.
-# After that change, the build fails if VITE_API_URL's origin is missing from it.
+# Production frontend build.
+# CSP_CONNECT_SRC is the extra connect-src origin. php artisan csp:nginx reads the same value.
+# When VITE_API_URL is set, CSP_CONNECT_SRC must include that origin.
+# An empty CSP_CONNECT_SRC is only valid for a same-host deploy, where VITE_API_URL is also empty.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -31,9 +33,11 @@ if [[ -n "${VITE_API_URL:-}" ]]; then
 fi
 
 if [[ -n "$origin" && -z "${CSP_CONNECT_SRC:-}" ]]; then
-  export CSP_CONNECT_SRC="$origin"
-  echo "CSP_CONNECT_SRC was empty. The build will use ${origin}, the same origin as VITE_API_URL."
-  echo "Set the CSP_CONNECT_SRC variable to that origin, and set the same value in the server .env, once the CSP change is merged."
+  echo "VITE_API_URL is ${origin}, but CSP_CONNECT_SRC is empty." >&2
+  echo "Set the CSP_CONNECT_SRC GitHub variable to ${origin}." >&2
+  echo "Set the same value in the server .env so connect-src allows that origin." >&2
+  echo "Leave both variables empty only when the site and the API share one host." >&2
+  exit 1
 fi
 
 if [[ -n "$origin" && -n "${CSP_CONNECT_SRC:-}" ]]; then

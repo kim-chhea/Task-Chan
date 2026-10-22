@@ -40,10 +40,13 @@ That flag would ignore the normal PHP config and drop extensions such as `pdo_my
 
 ### Frontend job
 
-1. The runner installs the current Node.js LTS release.
+1. The runner installs Node.js 22.
+   `.nvmrc` at the repo root is also `22`.
 2. It runs `npm ci` in `frontend/`.
-3. It runs `npm test`.
-4. It runs `npm run build`.
+3. It runs `npm audit --audit-level=high`.
+   A high or critical advisory fails CI.
+4. It runs `npm test`.
+5. It runs `npm run build`.
 
 The CI build does not set `VITE_API_URL`.
 The production build does. That happens in the deploy workflow.
@@ -66,18 +69,28 @@ Then:
    Nothing is sent to a server.
 2. If both secrets are set, the deploy job starts.
    It uses the GitHub Environment named `production`.
-   If you add a required reviewer, GitHub waits for that person before the job continues.
+   You must set the approval gate on that environment before you rely on this workflow.
+   The required reviewer is `kim-chhea`.
+   Until that gate is set, every merge to `main` goes live after CI passes.
+   The steps are in [The production environment](#the-production-environment) below.
 3. The job checks the secrets for real.
    A bad private key or a bad known_hosts file fails the job.
    The log names the secret and shows what a correct value looks like.
 4. If this commit is no longer the latest commit on `main`, the job stops.
    A newer commit will deploy instead.
    The server is not changed.
-5. It builds the frontend and installs PHP dependencies.
+5. It builds the frontend with Node.js 22 and installs PHP dependencies.
 6. It uploads a new folder to the server over SSH.
 7. On the server it links the shared `.env` and `storage`, runs migrations, and caches config.
-8. It points the live symlink at the new folder and requests `/up`.
-9. If `/up` fails, it points the symlink back at the previous folder.
+   It does not run `php artisan route:cache`.
+   `routes/web.php` registers `GET /` with a closure, and `route:cache` cannot cache a closure.
+8. It installs the 12M PHP ini with `sudo -n /usr/bin/install -m 644`.
+   If `PHP_INI_DIR` is missing, it stops here.
+   The live symlink is not changed.
+9. It points the live symlink at the new folder, reloads php-fpm and nginx, runs `php artisan view:clear`, and runs `php artisan queue:restart`.
+10. It requests `/up`.
+    The response must be HTTP 200 and the body must contain the text `Application up`.
+11. If a reload, `view:clear`, `queue:restart`, or `/up` fails, it points the symlink back, puts the previous `99-task-chan.ini` back, and reloads the services again.
 
 Two deploys never run at the same time.
 The second one waits until the first one is done.
@@ -216,6 +229,13 @@ The value must end with a newline.
 You can keep that comment.
 You still need one real key line.
 
+Do not hash the line.
+A hashed line starts with `|1|`.
+`ssh-keygen -H` writes those lines.
+This workflow rejects them.
+A hash cannot be checked against `SSH_HOST`.
+Paste the plain `ssh-keyscan` output, and leave `HashKnownHosts` off.
+
 The host on that line must be the same value as the `SSH_HOST` variable.
 If `SSH_PORT` is not 22, the host field must look like `[203.0.113.10]:2222` with your real IP and port.
 
@@ -265,7 +285,9 @@ Use your real host, not `example.com`.
 Extra origins the browser may call.
 Leave it empty when the site and the API share one host.
 When `VITE_API_URL` is set, set this to the same origin.
-The frontend build fails if they do not match.
+If `VITE_API_URL` is set and this variable is empty, the frontend build exits with an error.
+It does not fill the value in for you.
+The build also exits with an error if this variable is set but does not include that origin.
 Set the same value in the server `.env`.
 The deploy runs `php artisan csp:nginx` and writes `backend/deploy/nginx/csp.conf` from that value.
 
@@ -278,8 +300,10 @@ That works when nginx on the same machine answers `/up`.
 A public API host looks like `https://api.example.com/up`.
 
 Laravel already serves `/up`.
-A `200` means the new release is up.
-Anything else rolls back.
+HTTP 200 is not enough.
+The body must contain the text `Application up`.
+That is the text Laravel's `/up` page shows when the app is healthy.
+A 200 from the wrong site, or a page that does not contain that text, rolls back.
 
 ### `WEB_USER`
 
@@ -296,53 +320,76 @@ The server needs PHP 8.4.
 
 Optional systemd unit to reload, such as `php8.4-fpm`.
 If you leave it empty, the deploy tries `php8.4-fpm`, then `php8.3-fpm`, then `php-fpm`.
-A failed reload does not fail the deploy.
-If old code stays on screen, allow the deploy user to reload PHP without a password:
+A failed reload fails the deploy and rolls the symlink back.
+Set this variable to the real unit name.
+
+The deploy user must be allowed to run the reload and the PHP ini install with no password.
+The sudoers line has to name the exact commands the script runs.
 
 ```bash
 sudo visudo -f /etc/sudoers.d/taskchan-deploy
 ```
 
 ```
-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl reload php8.4-fpm, /usr/bin/systemctl reload nginx
+deploy ALL=(root) NOPASSWD: /usr/bin/install -m 644 /var/www/taskchan/shared/php-ini/99-task-chan.ini.next /etc/php/8.4/fpm/conf.d/99-task-chan.ini, /usr/bin/install -m 644 /var/www/taskchan/shared/php-ini/99-task-chan.ini.previous /etc/php/8.4/fpm/conf.d/99-task-chan.ini, /usr/bin/rm -f /etc/php/8.4/fpm/conf.d/99-task-chan.ini, /usr/bin/systemctl reload php8.4-fpm, /usr/bin/systemctl reload nginx
 ```
 
-Use your real user and unit names.
+That line is exact for `DEPLOY_PATH=/var/www/taskchan`, `PHP_INI_DIR=/etc/php/8.4/fpm/conf.d`, and `PHP_FPM_SERVICE=php8.4-fpm`.
+Replace those three paths and the unit name with yours.
+The install command copies the 12M file `backend/deploy/php/production.ini` onto `99-task-chan.ini`.
+The second install puts the previous `99-task-chan.ini` back if the deploy rolls back.
+The `rm` removes `99-task-chan.ini` on rollback when there was no previous file.
 
 ### `PHP_INI_DIR`
 
-Optional directory for an extra PHP ini file.
+Required directory for the production PHP ini file.
 Example: `/etc/php/8.4/fpm/conf.d`.
 
-If you set it, the deploy copies `backend/deploy/php/production.ini` to `99-task-chan.ini` in that directory.
+The deploy copies `backend/deploy/php/production.ini` to `99-task-chan.ini` in that directory.
+The command is `sudo -n /usr/bin/install -m 644`.
 That file sets `upload_max_filesize` and `post_max_size` to `12M`, and turns `expose_php` off.
-If the production file is missing, it copies `backend/php.ini` instead.
 Copying into `conf.d` adds those settings.
 It does not replace the rest of PHP's config.
+Do not pass `backend/php.ini` as `php -c php.ini`.
+That would drop extensions such as `pdo_mysql`.
+
+If `PHP_INI_DIR` is empty, or the directory does not exist, the deploy stops before it changes the live symlink.
+It keeps a copy of the old `99-task-chan.ini` and puts that file back if a later step rolls the deploy back.
+
 `backend/DEPLOY.md` also copies the file into the CLI `conf.d` directory.
 Set `PHP_INI_DIR` to the FPM directory.
 Copy the same file into the CLI directory yourself if you want `php artisan` to show the same limits.
 
-If you leave `PHP_INI_DIR` empty, the deploy does not change PHP's settings.
-Copy the file into `conf.d` yourself if uploads over 2 MB must work.
-
 ## The production environment
+
+Do this before the first merge to `main`.
+It is required.
+Until this gate is set, every merge to `main` goes live.
+CI can pass, the secrets can be present, and the deploy will connect to the server with nobody approving it.
 
 The deploy job uses a GitHub Environment named `production`.
 The name must be exactly that.
 
 1. Open the repo on GitHub.
 2. Go to **Settings**, then **Environments**.
-3. Click **New environment**.
+3. Click **New environment** if `production` does not exist.
 4. Name it `production`.
-5. Open **Required reviewers**.
-6. Add the GitHub user who should approve deploys.
-7. Save.
+5. Open **Deployment branches**.
+   GitHub also labels this **Deployment branches and tags**.
+6. Choose **Selected**.
+7. Add a rule for `main` only.
+   No other branch.
+8. Open **Required reviewers**.
+9. Add Kim-chhea.
+   The GitHub username is `kim-chhea`.
+10. Turn **Allow administrators to bypass** off.
+    An administrator must not be able to skip the review.
+11. Save.
 
 After that, a push to `main` still runs CI.
 When CI passes and the secrets exist, the deploy job waits.
 GitHub shows a **Review deployments** button.
-The job connects to the server only after approval.
+The job connects to the server only after `kim-chhea` approves.
 Rejecting the review skips the deploy.
 
 ## Prepare the server once
@@ -350,7 +397,15 @@ Rejecting the review skips the deploy.
 The server in this setup is a VPS you can SSH to.
 Ubuntu is a good fit. The scripts use `bash`, `rsync`, `flock`, and GNU `mv`.
 
-Install PHP 8.4, nginx, MySQL 8, `curl`, `rsync`, and `unzip`.
+Install PHP 8.4, nginx, MySQL 8, `curl`, `rsync`, `sudo`, and `unzip`.
+Pin nginx below 1.31.2.
+From nginx 1.31.2, `$request_id` is no longer drawn from a cryptographic random generator.
+The changelog says it uses SipHash-2-4 and treats `$request_id` as a non-security identifier.
+`backend/deploy/nginx/csp.conf` uses `$request_id` as the Content-Security-Policy nonce.
+A nonce has to be unpredictable.
+If you run nginx 1.31.2 or newer, do not use `$request_id` for that nonce.
+Generate a random nonce another way, and put that same value in the header and in the HTML.
+`backend/DEPLOY.md` describes the snippet.
 PHP needs the mysql, mbstring, xml, curl, zip, and bcmath extensions.
 
 Create the deploy user and the folder:
@@ -383,14 +438,51 @@ Put those values in `shared/.env`.
 The first deploy needs this in place.
 If `/up` fails, the workflow removes the new symlink when there is no older release.
 
+## Back up the database before each deploy
+
+Take a database dump before you approve the production deploy.
+The workflow does not do this for you.
+If `/up` fails, the workflow puts the old folder back.
+It does not undo migrations that already ran.
+
+On the server, use the database name from `shared/.env`.
+The name in the example env file is `work_tracker`.
+
+```bash
+mkdir -p /var/backups/taskchan
+mysqldump --single-transaction --routines --triggers work_tracker > /var/backups/taskchan/work_tracker-$(date -u +%Y%m%dT%H%M%SZ).sql
+```
+
+Use your real database name, and a MySQL user that can read it.
+Keep the dump until you know the new release is healthy.
+
+### Expand, then contract
+
+Change the database in two steps.
+Then the old code and the new code can both run.
+
+Expand means add something.
+Add the new column or the new table.
+Leave the old column in place.
+The old release still works if the deploy rolls back.
+The new release can write the new column.
+
+Contract means remove something.
+Drop the old column only in a later deploy, after the new code is live and no longer reads the old column.
+
+Do not rename a column in the same deploy that starts using the new name.
+Do not drop a column the current code still uses.
+A rollback would point the site at the old code while the database had already lost the column that code needs.
+
 ## What happens on a failure
 
 | When it fails | What stays live |
 |---|---|
 | Secret missing | Nothing changes. The deploy job is skipped. |
 | Secret present but invalid | Nothing is uploaded. The log names the secret. |
-| Upload or migrate fails | The previous `current` symlink stays. |
-| `/up` fails | `current` is pointed back at the previous release. |
+| Upload, migrate, or missing `PHP_INI_DIR` | The previous `current` symlink stays. The new PHP ini is not left in place. |
+| php-fpm reload, nginx reload, `view:clear`, or `queue:restart` fails | `current` is pointed back. The previous `99-task-chan.ini` is restored. |
+| `/up` is not HTTP 200, or the body does not contain `Application up` | `current` is pointed back. The previous `99-task-chan.ini` is restored. |
 
 Migrations that already ran are not undone.
 Rolling back the folder does not roll back the database.
@@ -430,11 +522,15 @@ The workflow will not run it for you.
   Those words are instructions. Replace them with the real IP.
 - Using `203.0.113.10`, `example.com`, or `YOUR_SERVER_IP`.
   The checker rejects documentation addresses and placeholders.
+- Pasting a hashed `known_hosts` line that starts with `|1|`.
+  Run `ssh-keyscan` and paste that output. Do not run `ssh-keygen -H`.
 - Forgetting the trailing newline after `-----END OPENSSH PRIVATE KEY-----` or after the known_hosts line.
   The log warns and adds the newline when it can.
   If the key is still invalid, the job fails and names the secret.
 - Putting the secrets only on the `production` environment.
   Put them on the repository.
+- Leaving the `production` environment without a required reviewer.
+  Until `kim-chhea` is required, **Allow administrators to bypass** is off, and deployment branches are **Selected** with only `main`, every merge to `main` goes live.
 - Setting `StrictHostKeyChecking` to `no` on the server or in a fork of this workflow.
   This repo does not do that. Do not add it.
 - Expecting `backend/php.ini` to be passed as `php -c php.ini` in production.

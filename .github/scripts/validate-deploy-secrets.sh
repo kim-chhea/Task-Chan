@@ -47,6 +47,7 @@ fail_known_hosts() {
   echo "Create it with: ssh-keyscan -t ed25519 <real server IP>" >&2
   echo "Replace <real server IP> with the server's IP. Do not type those words." >&2
   echo "Do not leave the secret empty. Do not use a placeholder IP. End the file with a newline." >&2
+  echo "Do not paste a hashed line. Hashed lines start with |1|. Paste the plain ssh-keyscan output." >&2
   exit 1
 }
 
@@ -157,7 +158,13 @@ if [[ -n "${PHP_FPM_SERVICE:-}" && ! "$PHP_FPM_SERVICE" =~ ^[a-zA-Z0-9][a-zA-Z0-
   exit 1
 fi
 
-if [[ -n "${PHP_INI_DIR:-}" && ( ! "$PHP_INI_DIR" =~ ^/[A-Za-z0-9._/-]+$ || "$PHP_INI_DIR" == *..* ) ]]; then
+if [[ -z "${PHP_INI_DIR//[[:space:]]/}" ]]; then
+  echo "Variable PHP_INI_DIR is not set." >&2
+  echo "Set it to PHP-FPM's conf.d directory, such as /etc/php/8.4/fpm/conf.d." >&2
+  echo "The deploy installs the 12M PHP ini there and stops before the symlink swap if this directory is missing." >&2
+  exit 1
+fi
+if [[ ! "$PHP_INI_DIR" =~ ^/[A-Za-z0-9._/-]+$ || "$PHP_INI_DIR" == *..* ]]; then
   echo "Variable PHP_INI_DIR must be an absolute directory, such as /etc/php/8.4/fpm/conf.d." >&2
   exit 1
 fi
@@ -242,7 +249,6 @@ chmod 600 "$known_file"
 key_types='ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521|ssh-ed25519-cert-v01@openssh.com|ssh-rsa-cert-v01@openssh.com|ecdsa-sha2-nistp256-cert-v01@openssh.com|sk-ssh-ed25519@openssh.com|sk-ecdsa-sha2-nistp256@openssh.com'
 line_no=0
 plain_lines=0
-hashed_lines=0
 matched=0
 while IFS= read -r line || [[ -n "$line" ]]; do
   line_no=$((line_no + 1))
@@ -251,6 +257,9 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   fi
   # shellcheck disable=SC2034
   read -r host keytype keydata _comment <<< "$line"
+  if [[ "$host" == '|1|'* ]]; then
+    fail_known_hosts "Line ${line_no} is a hashed known_hosts line (it starts with |1|). A hash cannot be checked against SSH_HOST. Paste the plain line from ssh-keyscan -t ed25519. Do not run ssh-keygen -H, and leave HashKnownHosts off."
+  fi
   if [[ -z "${keydata:-}" ]]; then
     fail_known_hosts "Line ${line_no} is not <host> <keytype> <base64>."
   fi
@@ -270,8 +279,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   IFS=',' read -r -a host_parts <<< "$host"
   for part in "${host_parts[@]}"; do
     if [[ "$part" == '|1|'* ]]; then
-      hashed_lines=$((hashed_lines + 1))
-      continue
+      fail_known_hosts "Line ${line_no} contains a hashed host (|1|). Paste the plain ssh-keyscan line. Do not run ssh-keygen -H."
     fi
     if [[ "$part" == *'*'* || "$part" == *'?'* || "$part" == '!'* ]]; then
       fail_known_hosts "Line ${line_no} uses a wildcard host. Pin the exact host from ssh-keyscan."
@@ -300,14 +308,11 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   done
 done < "$known_file"
 
-if ((plain_lines == 0 && hashed_lines == 0)); then
+if ((plain_lines == 0)); then
   fail_known_hosts "There is no key line. Comments and blank lines do not count."
 fi
-if ((matched == 0 && plain_lines > 0)); then
+if ((matched == 0)); then
   fail_known_hosts "No line is for SSH_HOST (${SSH_HOST}) on port ${SSH_PORT}. The host in the secret and the SSH_HOST variable must be the same."
-fi
-if ((matched == 0 && hashed_lines == 0)); then
-  fail_known_hosts "No usable host key line was found."
 fi
 
 kh_err="$out_dir/known_hosts.err"
