@@ -3,21 +3,21 @@
 JSON API of Task-Chan (Laravel 13 + MySQL 8 + Sanctum). The React app is in `../frontend`; `../README.md` explains how to run both. Personal, gamified work tracker: capture items, organize, schedule, do, review. Finishing items earns tokens you spend in the Locker on an original anime character and animal partner. Visual spec: `../Work Tracker — Flow & Screens.html`.
 
 ## Setup
-1. PHP 8.3+ and Composer (Laravel Herd works), Node 22+, MySQL 8.
+1. PHP 8.4+ and Composer (Laravel Herd works), Node 22+, MySQL 8.
 2. Database: use your own MySQL 8 (set `DB_*` in `.env`, create `work_tracker` and `work_tracker_test`), or either:
-   - Docker: `docker compose up -d` (port 3306), set `DB_PORT=3306` in `.env`; or
-   - no Docker: `pwsh scripts/mysql-local.ps1` (port 3307, the `.env.example` default).
+   - Docker: `docker compose up -d` (published on host port 3307, the `.env.example` default); or
+   - no Docker: `pwsh scripts/mysql-local.ps1` (port 3307).
 3. `composer install`
 4. `cp .env.example .env && php artisan key:generate`
 5. `php artisan migrate:fresh --seed`
 6. `pwsh scripts/serve.ps1` (or `php artisan serve`). The API is at http://localhost:8000/api; start the frontend from `../frontend`.
 
-**File uploads:** the app accepts 10 MB per file, but PHP defaults to 2 MB (Herd's `php.ini` too). `scripts/serve.ps1` raises the limits for dev (`upload_max_filesize=12M`, `post_max_size=12M`). In Herd raise *Max file upload size* in its PHP settings; in production use `deploy/php/production.ini` (`upload_max_filesize=12M`, `post_max_size=12M`).
+**File uploads:** the app accepts 10 MB per file, but PHP defaults to 2 MB (Herd's `php.ini` too). `php artisan serve`, `composer dev`, and `scripts/serve.ps1` load `php.ini` (`upload_max_filesize=12M`, `post_max_size=12M`). In Herd raise *Max file upload size* in its PHP settings; in production use `deploy/php/production.ini` (`upload_max_filesize=12M`, `post_max_size=12M`).
 
 Seeded login: `demo@worktracker.test` / `password`. Registration is open only until the first user exists.
 
 ## Env vars
-`DB_*` (MySQL), `APP_TIMEZONE` (default `Asia/Bangkok`), `FILESYSTEM_DISK` (`local`, or `s3` in prod), `SANCTUM_STATEFUL_DOMAINS` (add your host if not localhost).
+`DB_*` (MySQL), `APP_TIMEZONE` (default `Asia/Bangkok`), `FILESYSTEM_DISK` (`local`, or `s3` in prod), `SANCTUM_STATEFUL_DOMAINS` (add your host if not localhost). Production placeholders (no secrets) are in `.env.production.example`.
 
 ## Tests
 `php artisan test` (Pest, uses the `work_tracker_test` database and wipes it). UI logic tests (quick-add parser, token UI, column helpers) live in `../frontend` (`npm test`).

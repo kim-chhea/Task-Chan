@@ -15,7 +15,12 @@ class AttachmentController extends Controller
     public function store(Request $request, Item $item): JsonResponse
     {
         $this->authorize('manage', $item);
-        $request->validate(['file' => ['required', 'file', 'max:10240']]); // 10 MB
+        $request->validate([
+            'file' => ['required', 'file', 'max:10240', 'mimes:pdf,png,jpg,jpeg,gif,webp,txt,md,csv,docx,xlsx,zip'],
+        ], [
+            'file.max' => 'The file must be 10 MB or smaller.',
+            'file.mimes' => 'This file type is not allowed.',
+        ]);
 
         $file = $request->file('file');
         $disk = config('filesystems.default');
