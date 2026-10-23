@@ -1,0 +1,121 @@
+name: Deploy Production
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# One production deploy at a time. A second push waits. It does not cancel
+# the deploy that is already connected to the server.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  check-secrets:
+    name: Check deploy configuration
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Checkout the commit CI tested
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+
+      - name: Skip when secrets are missing or this commit is stale
+        id: check
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: bash .github/scripts/check-deploy-configured.sh
+
+  deploy:
+    name: Deploy
+    needs: check-secrets
+    if: ${{ always() && needs.check-secrets.result == 'success' && needs.check-secrets.outputs.ready == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      SSH_HOST: ${{ vars.SSH_HOST }}
+      SSH_USER: ${{ vars.SSH_USER }}
+      SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      VITE_API_URL: ${{ vars.VITE_API_URL }}
+      CSP_CONNECT_SRC: ${{ vars.CSP_CONNECT_SRC }}
+      HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL || 'http://127.0.0.1/up' }}
+      WEB_USER: ${{ vars.WEB_USER || 'www-data' }}
+      PHP_BIN: ${{ vars.PHP_BIN || 'php' }}
+      PHP_FPM_SERVICE: ${{ vars.PHP_FPM_SERVICE }}
+      PHP_INI_DIR: ${{ vars.PHP_INI_DIR }}
+    steps:
+      - name: Checkout the commit CI tested
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+
+      - name: Skip if a newer commit is already on main
+        id: tip
+        run: bash .github/scripts/check-main-tip.sh
+
+      - name: Validate deploy secrets
+        if: steps.tip.outputs.skipped != 'true'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: bash .github/scripts/validate-deploy-secrets.sh "${{ runner.temp }}/ssh"
+
+      - name: Set up PHP 8.4
+        if: steps.tip.outputs.skipped != 'true'
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.4"
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql, dom, filter, fileinfo, tokenizer, bcmath, curl, zip
+          coverage: none
+          ini-values: upload_max_filesize=12M, post_max_size=12M
+          tools: composer:v2
+
+      - name: Cache Composer packages
+        if: steps.tip.outputs.skipped != 'true'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ runner.os }}-php8.4-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-php8.4-
+
+      - name: Set up Node.js 22
+        if: steps.tip.outputs.skipped != 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the frontend
+        if: steps.tip.outputs.skipped != 'true'
+        run: bash .github/scripts/build-frontend.sh
+
+      - name: Assemble the release
+        if: steps.tip.outputs.skipped != 'true'
+        run: bash .github/scripts/assemble-release.sh "${{ runner.temp }}/release"
+
+      - name: Upload the release and switch it live
+        if: steps.tip.outputs.skipped != 'true'
+        run: bash .github/scripts/upload-and-deploy.sh "${{ runner.temp }}/ssh" "${{ runner.temp }}/release"
+
+      - name: Remove the SSH key from the runner
+        if: always()
+        run: rm -rf "${{ runner.temp }}/ssh"

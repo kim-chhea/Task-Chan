@@ -1,5 +1,7 @@
 # Deploy
 
+GitHub Actions can deploy this app to a VPS. Read [`../docs/CI-CD.md`](../docs/CI-CD.md). If you use Laravel Cloud or Forge instead, keep the CI workflow and replace only the deploy job.
+
 The API (this directory) and the React app (`../frontend`) are served from the **same host** when you can. Browsers then call `/api` and `/sanctum` on the SPA's origin. Leave `VITE_API_URL` and `CSP_CONNECT_SRC` empty, and `connect-src 'self'` is the API origin.
 
 A split-host deploy (the SPA on `app.example.com`, the API on `api.example.com`) sets **one** value, `CSP_CONNECT_SRC=https://api.example.com`, in the Laravel environment and in the frontend build environment, and sets `VITE_API_URL` to that same origin. `CSP_CONNECT_SRC` is what `connect-src` uses in every place the browser can see:
@@ -65,7 +67,7 @@ The SPA is `frontend/dist` (Vite build, fallback to `index.html`). This Laravel 
 
 `csp.conf` marks only `location = /index.html` with `Cache-Control: no-store`. That location is the file itself and the internal redirect from `try_files ... /index.html`. A `location` that sets any `add_header` drops server-level `add_header` values, so that block repeats the CSP and the `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` lines. Leave `location /` without its own `add_header`: `/assets/*` is served from there and must not be `no-store`. `sub_filter` still applies from the server block as long as that location does not define its own `sub_filter`.
 
-Do not precompress `index.html` (`index.html.gz`, or `gzip_static` for that file). `gzip_static` serves the compressed file and skips `sub_filter`, so `__CSP_NONCE__` would reach the browser. nginx 1.31.2's changelog says `$request_id` now uses SipHash-2-4, replacing OpenSSL `RAND_bytes`; that change describes the variable as a non-security identifier. This snippet still uses it. If the nginx you run does not draw `$request_id` from a cryptographic RNG, generate the nonce another way and keep the header and the HTML on that same value.
+Do not precompress `index.html` (`index.html.gz`, or `gzip_static` for that file). `gzip_static` serves the compressed file and skips `sub_filter`, so `__CSP_NONCE__` would reach the browser. Pin nginx below 1.31.2. nginx 1.31.2's changelog says `$request_id` now uses SipHash-2-4, replacing OpenSSL `RAND_bytes`; that change describes the variable as a non-security identifier, so it is no longer a CSPRNG. This snippet still uses `$request_id` as the CSP nonce. If you run nginx 1.31.2 or newer, do not use `$request_id` for that nonce: generate a random nonce another way and keep the header and the HTML on that same value.
 
 When the API is on another origin, set `CSP_CONNECT_SRC` (see the top of this file) and regenerate the snippet before reloading nginx:
 
