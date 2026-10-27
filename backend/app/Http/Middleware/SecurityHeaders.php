@@ -7,7 +7,14 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-/** Defensive headers for a JSON API: no sniffing, no framing, no referrer leaks, and nothing cached for a logged-in user. */
+/**
+ * Defensive headers for a JSON API: no sniffing, no framing, and nothing cached for a logged-in user.
+ *
+ * Referrer-Policy is same-origin. Cross-origin requests send no Referer. Same-origin requests still
+ * do: Sanctum starts the session only when Referer or Origin matches SANCTUM_STATEFUL_DOMAINS, and a
+ * same-origin GET often has no Origin. no-referrer strips that Referer, so the session is skipped
+ * and the SPA treats a successful login as logged out.
+ */
 class SecurityHeaders
 {
     public function handle(Request $request, Closure $next): Response
@@ -16,7 +23,7 @@ class SecurityHeaders
 
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('X-Frame-Options', 'DENY');
-        $response->headers->set('Referrer-Policy', 'no-referrer');
+        $response->headers->set('Referrer-Policy', 'same-origin');
         if (! $response->headers->has('Cache-Control') || $response->headers->get('Cache-Control') === 'no-cache, private') {
             $response->headers->set('Cache-Control', 'no-store, private');
         }

@@ -83,6 +83,8 @@ That meta policy omits `frame-ancestors`. Browsers ignore `frame-ancestors` in a
 
 Fonts are self-hosted (`@fontsource/dela-gothic-one`, `@fontsource/geist`, `@fontsource/geist-mono`). There is no Google Fonts stylesheet, so `style-src` and `font-src` stay `'self'`. A few components set element `style` attributes (animation delay, progress width). Those are covered by `style-src-attr 'unsafe-inline'`; a nonce does not apply to style attributes, and stylesheets are not allowed from `'unsafe-inline'`.
 
+`Referrer-Policy` is `same-origin` on the SPA document and on API responses. Sanctum starts the session only when the request's `Referer` or `Origin` is listed in `SANCTUM_STATEFUL_DOMAINS`. A same-origin `GET` (the SPA's `/api/bootstrap` after login) usually has no `Origin`. `no-referrer` also drops `Referer`, so Sanctum skips the session, bootstrap returns a guest, and the SPA sends the user back to `/login` after a 200 login. Keep this policy on both the server block and the `index.html` location. nginx does not inherit `add_header` into a location that sets its own.
+
 Same-host sketch for a checkout at `/home/forge/task-chan` (keep Forge's `listen` and `ssl_certificate` lines; this is the part that serves the SPA and the API on one name):
 
 ```nginx
@@ -93,7 +95,7 @@ client_max_body_size 12M;
 include /home/forge/task-chan/backend/deploy/nginx/csp.conf;
 add_header X-Content-Type-Options "nosniff" always;
 add_header X-Frame-Options "DENY" always;
-add_header Referrer-Policy "no-referrer" always;
+add_header Referrer-Policy "same-origin" always;
 
 # No add_header in this location. /assets/* is served here and must stay cacheable.
 # A missing file is an internal redirect to /index.html, which csp.conf marks no-store.
@@ -138,6 +140,6 @@ Log in, check `/today`, complete an item, confirm the token card matches `/locke
 - Leave `TRUSTED_PROXIES` blank unless the app sits behind a proxy. Then set it to the real proxy or load-balancer IPs, comma-separated. `*` trusts a spoofed `X-Forwarded-For`.
 - **Mail:** `MAIL_MAILER=log` only writes reset links to the log. Set a real mailer (`MAIL_MAILER=smtp` plus `MAIL_*`) or password reset will not reach you.
 - Run `php artisan optimize` after each deploy. Back up the database and the file disk.
-- API responses carry `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Cache-Control: no-store` (see `app/Http/Middleware/SecurityHeaders.php`). The SPA document (`index.html`, including the `try_files` fallback) also carries `Content-Security-Policy` and `Cache-Control: no-store`. `/assets/*` does not get `no-store`. Split-host deploys set `CSP_CONNECT_SRC` to the API origin for both Laravel and the frontend build, and `deploy/nginx/csp.conf` was regenerated with `php artisan csp:nginx`.
+- API responses carry `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy: same-origin` and `Cache-Control: no-store` (see `app/Http/Middleware/SecurityHeaders.php`). The SPA document (`index.html`, including the `try_files` fallback) carries that same `Referrer-Policy` (not `no-referrer`), plus `Content-Security-Policy` and `Cache-Control: no-store`. `/assets/*` does not get `no-store`. Split-host deploys set `CSP_CONNECT_SRC` to the API origin for both Laravel and the frontend build, and `deploy/nginx/csp.conf` was regenerated with `php artisan csp:nginx`.
 - `deploy/php/production.ini` is loaded (`upload_max_filesize=12M`, `post_max_size=12M`, `expose_php=Off`) and nginx `client_max_body_size` is at least `12M`.
 - `.env` is git-ignored: never commit it, and rotate any database password that has been shared.
