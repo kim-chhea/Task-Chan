@@ -5,12 +5,14 @@ namespace App\Models;
 use App\Enums\ItemStatus;
 use App\Enums\ItemType;
 use App\Enums\Priority;
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Item extends Model
 {
@@ -60,8 +62,19 @@ class Item extends Model
         return $this->belongsToMany(Item::class, 'item_links', 'item_id', 'linked_item_id');
     }
 
+    /** Case-insensitive title or notes match. `%` and `_` in the term are literal. */
+    public function scopeWhereSearch(Builder $query, string $term): void
+    {
+        $like = '%'.addcslashes($term, '\\%_').'%';
+
+        $query->where(function (Builder $query) use ($like) {
+            $query->whereRaw('LOWER(title) LIKE LOWER(?)', [$like])
+                ->orWhereRaw('LOWER(CAST(notes AS CHAR)) LIKE LOWER(?)', [$like]);
+        });
+    }
+
     /** Tokens this item pays when completed on `$on` (priority reward + on-time bonus). */
-    public function rewardOn(?\Carbon\CarbonInterface $on = null): int
+    public function rewardOn(?CarbonInterface $on = null): int
     {
         $on ??= now();
         $reward = $this->priority->reward();
