@@ -62,7 +62,7 @@ it('sends no-store and the csp on the html document only', function () {
         ->and($block)->toContain("style-src 'self' 'nonce-\$csp_nonce'")
         ->and($block)->toContain('add_header X-Content-Type-Options "nosniff" always;')
         ->and($block)->toContain('add_header X-Frame-Options "DENY" always;')
-        ->and($block)->toContain('add_header Referrer-Policy "no-referrer" always;')
+        ->and($block)->toContain('add_header Referrer-Policy "same-origin" always;')
         ->and($outside)->not->toContain('add_header Cache-Control')
         ->and($outside)->toContain('add_header Content-Security-Policy')
         ->and($snippet)->toContain('gzip_static');

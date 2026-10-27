@@ -260,6 +260,6 @@ it('sends defensive headers on API responses', function () {
     $this->actingAs($this->user)->getJson('/api/today')
         ->assertHeader('X-Content-Type-Options', 'nosniff')
         ->assertHeader('X-Frame-Options', 'DENY')
-        ->assertHeader('Referrer-Policy', 'no-referrer')
+        ->assertHeader('Referrer-Policy', 'same-origin')
         ->assertHeaderMissing('Content-Security-Policy');
 });
