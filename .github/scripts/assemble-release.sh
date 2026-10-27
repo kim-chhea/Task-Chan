@@ -35,8 +35,9 @@ fi
   }
   trap cleanup EXIT
   cp .env.example .env
-  php artisan key:generate --force --ansi
+  # artisan requires vendor/autoload.php, which does not exist until composer install.
   composer install --no-dev --no-interaction --prefer-dist --no-progress --optimize-autoloader
+  php artisan key:generate --force --ansi
 )
 
 mkdir -p "$dest/backend" "$dest/frontend"
