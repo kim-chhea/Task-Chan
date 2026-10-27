@@ -103,15 +103,16 @@ describe('logout', () => {
     }
 
     async function seeAccount() {
-        const trigger = await screen.findByRole('button', { name: 'Account menu for Mina Sato' });
+        expect((await screen.findByLabelText('Name') as HTMLInputElement).value).toBe('Mina Sato');
+        const trigger = screen.getByRole('button', { name: 'Account menu for Mina Sato' });
         expect(trigger.textContent).toBe('M');
         expect(screen.getByRole('button', { name: 'Log out · Mina Sato' })).toBeTruthy();
-        expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Mina Sato');
         return trigger;
     }
 
     async function expectLoggedOut() {
-        expect(await screen.findByLabelText('Email')).toBeTruthy();
+        expect(await screen.findByRole('button', { name: 'Log in' })).toBeTruthy();
+        expect(screen.getByLabelText('Email')).toBeTruthy();
         expect(screen.getByTestId('path').textContent).toBe('/login');
         expect(screen.queryByRole('button', { name: 'Account menu for Mina Sato' })).toBeNull();
         expect(screen.queryByDisplayValue('Mina Sato')).toBeNull();
