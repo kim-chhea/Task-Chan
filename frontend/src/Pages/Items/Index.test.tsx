@@ -63,6 +63,14 @@ describe('All items search', () => {
         expect(screen.getByRole('button', { name: 'Clear search' })).toBeTruthy();
     });
 
+    it('puts search on its own row until the screen is wide', () => {
+        renderIndex();
+        const row = searchBox().parentElement?.parentElement;
+        expect(row?.className).toContain('flex-col');
+        expect(row?.className).toContain('sm:flex-row');
+        expect(searchBox().parentElement?.className).toContain('w-full');
+    });
+
     it('defaults a missing q to an empty field', () => {
         const get = vi.spyOn(router, 'get').mockImplementation(() => {});
         renderIndex({ filters: { ...filters, q: undefined as unknown as string } });

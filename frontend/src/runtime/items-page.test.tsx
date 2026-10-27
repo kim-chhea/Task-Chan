@@ -82,13 +82,14 @@ describe('All items search round-trip', () => {
                 if (url.pathname === '/api/bootstrap') return json(bootstrap);
                 if (url.pathname === '/api/items') {
                     const q = (url.searchParams.get('q') ?? '').trim().slice(0, 100);
-                    // The API matches title or notes and echoes filters.q. A notes-only hit
-                    // stays in the list even though its title does not contain the query.
-                    const rows = q === '' ? items : q.toLowerCase() === 'dgb' ? [items[0], notesHit] : [];
+                    // Stand-in for the API: it already matched title or notes and set `matched`.
+                    // `notesHit` is a notes match whose title, number, and sector do not contain the query.
+                    const rows = q === '' ? items : q.toLowerCase() === 'dgb' ? [notesHit] : [];
+                    const matched = q.toLowerCase() === 'dgb' ? 4 : rows.length;
                     return json({
                         items: rows,
                         filters: { status: 'all', type: 'all', sector: 'all', range: 'all', q },
-                        matched: rows.length,
+                        matched,
                         total: items.length,
                         openTokens: 20,
                         fields: [],
@@ -119,13 +120,16 @@ describe('All items search round-trip', () => {
         );
     }
 
-    it('shows filters.q and the rows the API already matched', async () => {
+    it('shows filters.q and the rows and matched count the API returned', async () => {
         await mount('/items?q=DGB');
         const box = (await screen.findByRole('searchbox', { name: 'Search items' })) as HTMLInputElement;
         expect(box.value).toBe('DGB');
-        expect(screen.getByText('Ticket from DGB')).toBeTruthy();
         expect(screen.getByText('Confirmation letter')).toBeTruthy();
+        expect(screen.queryByText('Ticket from DGB')).toBeNull();
         expect(screen.queryByText('Order stationery')).toBeNull();
+        expect(screen.getByText('Showing the newest 1 of 4. Use the filters to narrow the list.')).toBeTruthy();
+        const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([input]) => String(input));
+        expect(calls.some((url) => url.includes('/api/items') && url.includes('q=DGB'))).toBe(true);
     });
 
     it('shows the no-matches line when the query hits nothing', async () => {

@@ -119,7 +119,7 @@ export default function Index({ items, filters: incoming, total, matched, openTo
                 </div>
             </PageHeader>
 
-            <div className="rise relative flex flex-wrap items-center gap-3.5" style={{ animationDelay: '0.1s' }}>
+            <div className="rise relative flex flex-col gap-3.5 sm:flex-row sm:flex-wrap sm:items-center" style={{ animationDelay: '0.1s' }}>
                 <div role="group" aria-label="Status" className="inline-flex rounded-[11px] border-2 border-ink bg-white p-1">
                     {STATUS_TABS.map(([k, label]) => (
                         <button key={k} type="button" aria-pressed={filters.status === k} onClick={() => go({ status: k })} className={`min-h-9 rounded-lg px-3.5 text-[13px] font-bold ${filters.status === k ? 'bg-ink text-white' : 'text-ink-2'}`}>
@@ -127,7 +127,7 @@ export default function Index({ items, filters: incoming, total, matched, openTo
                         </button>
                     ))}
                 </div>
-                <div className="relative w-full basis-full sm:w-72 sm:basis-auto">
+                <div className="relative w-full sm:w-72">
                     <label htmlFor="item-search" className="sr-only">Search items</label>
                     <input
                         id="item-search"
