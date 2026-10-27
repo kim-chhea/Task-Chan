@@ -52,6 +52,21 @@ const items = [
     },
 ];
 
+const notesHit = {
+    id: 3,
+    number: '0009',
+    title: 'Confirmation letter',
+    type: 'task',
+    status: 'not_started',
+    priority: 'medium',
+    sector: 'Records',
+    deadline: null,
+    received_at: null,
+    completed_at: null,
+    done: false,
+    reward: 10,
+};
+
 function json(body: unknown, status = 200) {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
@@ -66,10 +81,14 @@ describe('All items search round-trip', () => {
                 if (url.pathname === '/sanctum/csrf-cookie') return new Response(null, { status: 204 });
                 if (url.pathname === '/api/bootstrap') return json(bootstrap);
                 if (url.pathname === '/api/items') {
+                    const q = (url.searchParams.get('q') ?? '').trim().slice(0, 100);
+                    // The API matches title or notes and echoes filters.q. A notes-only hit
+                    // stays in the list even though its title does not contain the query.
+                    const rows = q === '' ? items : q.toLowerCase() === 'dgb' ? [items[0], notesHit] : [];
                     return json({
-                        items,
-                        filters: { status: 'all', type: 'all', sector: 'all', range: 'all' },
-                        matched: items.length,
+                        items: rows,
+                        filters: { status: 'all', type: 'all', sector: 'all', range: 'all', q },
+                        matched: rows.length,
                         total: items.length,
                         openTokens: 20,
                         fields: [],
@@ -100,11 +119,12 @@ describe('All items search round-trip', () => {
         );
     }
 
-    it('shows the query from the URL and the rows that match, before the API echoes q', async () => {
+    it('shows filters.q and the rows the API already matched', async () => {
         await mount('/items?q=DGB');
         const box = (await screen.findByRole('searchbox', { name: 'Search items' })) as HTMLInputElement;
         expect(box.value).toBe('DGB');
         expect(screen.getByText('Ticket from DGB')).toBeTruthy();
+        expect(screen.getByText('Confirmation letter')).toBeTruthy();
         expect(screen.queryByText('Order stationery')).toBeNull();
     });
 

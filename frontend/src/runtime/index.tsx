@@ -23,7 +23,6 @@ import { Link as RouterLink, Navigate, matchPath, useLocation, type NavigateFunc
 import LoadingScreen, { LoadingBadge, LoadingPanel } from '@/Components/LoadingScreen';
 import AppLayout from '@/Layouts/AppLayout';
 import { ApiError, UNAUTHENTICATED_EVENT, api, apiProblem, type ApiProblem } from '@/lib/api';
-import { withItemQuery } from './itemSearch';
 
 type Method = 'get' | 'post' | 'put' | 'patch' | 'delete';
 type Props = Record<string, any>;
@@ -392,9 +391,8 @@ export function AppHost({ navigate }: { navigate: NavigateFunction }) {
                     wantsShared && store.shared?.auth?.user ? refreshShared() : Promise.resolve(store.shared),
                     wantsPage && screen.endpoint ? api<Props>('GET', `${screen.endpoint(params)}${location.search}`) : Promise.resolve(null),
                 ]);
-                const payload = data && screen.component === 'Items/Index' ? withItemQuery(data, search) : data;
                 const prev = store.page?.component === screen.component ? store.page.props : {};
-                const merged = payload ? (only ? { ...prev, ...Object.fromEntries(only.filter((k) => k in payload).map((k) => [k, payload[k]])) } : payload) : prev;
+                const merged = data ? (only ? { ...prev, ...Object.fromEntries(only.filter((k) => k in data).map((k) => [k, data[k]])) } : data) : prev;
                 const extra = screen.props?.({ params, search, shared: sh ?? {} }) ?? {};
                 setErrorStatus(null);
                 set({ page: { component: screen.component, props: { ...merged, ...extra }, url: location.pathname + location.search } });
