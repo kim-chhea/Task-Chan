@@ -20,6 +20,8 @@ import {
     type ReactNode,
 } from 'react';
 import { Link as RouterLink, Navigate, matchPath, useLocation, type NavigateFunction } from 'react-router-dom';
+import LoadingScreen, { LoadingBadge, LoadingPanel } from '@/Components/LoadingScreen';
+import AppLayout from '@/Layouts/AppLayout';
 import { ApiError, UNAUTHENTICATED_EVENT, api, apiProblem, type ApiProblem } from '@/lib/api';
 
 type Method = 'get' | 'post' | 'put' | 'patch' | 'delete';
@@ -355,7 +357,7 @@ function Fallback({ status }: { status: number }) {
     useEffect(() => {
         void pageModules['../Pages/Error.tsx']().then((m) => setErr(() => m.default));
     }, []);
-    return Err ? <Err status={status} /> : null;
+    return Err ? <Err status={status} /> : <LoadingScreen />;
 }
 
 export function AppHost({ navigate }: { navigate: NavigateFunction }) {
@@ -363,6 +365,8 @@ export function AppHost({ navigate }: { navigate: NavigateFunction }) {
     const { shared, page, status, error } = useStore();
     const location = useLocation();
     const [errorStatus, setErrorStatus] = useState<number | null>(null);
+    const pendingCount = useRef(0);
+    const [busy, setBusy] = useState(false);
 
     const hit = SCREENS.map((s) => ({ s, m: matchPath(s.path, location.pathname) })).find((x) => x.m);
     const screen = hit?.s;
@@ -426,6 +430,20 @@ export function AppHost({ navigate }: { navigate: NavigateFunction }) {
         return () => window.clearTimeout(t);
     }, [error]);
 
+    // Form posts and page fetches already announce start/finish. The badge uses that for in-place waits.
+    useEffect(() => {
+        const onStart = () => {
+            pendingCount.current += 1;
+            setBusy(true);
+        };
+        const onFinish = () => {
+            pendingCount.current = Math.max(0, pendingCount.current - 1);
+            if (pendingCount.current === 0) setBusy(false);
+        };
+        const off = [router.on('start', onStart), router.on('finish', onFinish)];
+        return () => off.forEach((fn) => fn());
+    }, []);
+
     // A flash message belongs to one screen: drop it on the next navigation unless it was set for the screen we just opened.
     useEffect(() => {
         if (store.carry) set({ carry: false });
@@ -438,13 +456,27 @@ export function AppHost({ navigate }: { navigate: NavigateFunction }) {
         void pageModules[`../Pages/${page.component}.tsx`]().then((m) => setModule({ name: page.component, Comp: m.default }));
     }, [page, Module?.name]);
 
-    if (!shared) return null;
+    if (!shared) return <LoadingScreen />;
     if (location.pathname === '/') return <Navigate to="/today" replace />;
     if (!screen) return <Fallback status={404} />;
     if (screen.access === 'auth' && !authed) return <Navigate to="/login" replace />;
     if (screen.access === 'guest' && authed) return <Navigate to="/today" replace />;
     if (errorStatus) return <Fallback status={errorStatus} />;
-    if (!page || !Module || Module.name !== page.component || page.component !== screen.component) return null;
+
+    const pageReady = !!page && !!Module && Module.name === page.component && page.component === screen.component;
+    // Logged-in waits keep the shell so navigation doesn't flash a blank page. Guests get the splash.
+    if (!pageReady) {
+        if (authed && shared.game && shared.rules) {
+            return (
+                <PageContext.Provider value={{ props: shared, url: location.pathname + location.search, component: screen.component }}>
+                    <AppLayout>
+                        <LoadingPanel />
+                    </AppLayout>
+                </PageContext.Provider>
+            );
+        }
+        return <LoadingScreen />;
+    }
 
     const stateStatus = location.state && typeof location.state === 'object' ? (location.state as { status?: unknown }).status : undefined;
     const flash = status || (typeof stateStatus === 'string' ? stateStatus : null);
@@ -455,6 +487,7 @@ export function AppHost({ navigate }: { navigate: NavigateFunction }) {
     return (
         <PageContext.Provider value={{ props, url: page.url, component: page.component }}>
             {Comp.layout ? Comp.layout(el) : el}
+            {busy && <LoadingBadge />}
             {error && (
                 <div role="alert" className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-xl border-2.5 border-ink bg-pink px-4 py-3 text-sm font-semibold text-ink shadow-hard-sm">
                     {error}

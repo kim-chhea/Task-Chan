@@ -233,8 +233,7 @@ describe('auth forms', () => {
         fireEvent.change(screen.getByLabelText('Confirm Password'), { target: { value: 'new-password' } });
         fireEvent.click(screen.getByRole('button', { name: 'Reset Password' }));
 
-        const status = await screen.findByRole('status');
-        expect(status.textContent).toContain('Your password has been reset.');
+        expect(await screen.findByText('Your password has been reset.')).toBeTruthy();
         const sent = fetchMock().mock.calls.find((call) => String(call[0]).includes('/api/reset-password'));
         const body = JSON.parse(String(sent?.[1]?.body)) as { token: string; email: string };
         expect(body.token).toBe('abc123');
