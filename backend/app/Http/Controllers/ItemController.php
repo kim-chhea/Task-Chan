@@ -3,22 +3,25 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ItemStatus;
+use App\Http\Controllers\Api\ItemColumns;
 use App\Http\Resources\ItemResource;
 use App\Models\Item;
 use App\Models\MasterRecord;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ItemController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $term = $this->searchTerm($request);
         $userId = $request->user()->id;
         $filters = [
             'status' => $request->query('status', 'all'),
             'type' => $request->query('type', 'all'),
             'sector' => $request->query('sector', 'all'),
             'range' => $request->query('range', 'all'),
+            'q' => $term,
         ];
 
         $q = Item::where('user_id', $userId)->with('masterRecord');
@@ -33,6 +36,9 @@ class ItemController extends Controller
         }
         if ($filters['range'] === '30') {
             $q->whereBetween('deadline', [now()->toDateString(), now()->addDays(30)->toDateString()]);
+        }
+        if ($term !== '') {
+            $q->whereSearch($term);
         }
 
         $matched = (clone $q)->count();
@@ -81,14 +87,29 @@ class ItemController extends Controller
         ]);
     }
 
+    /** Trimmed `q`, or 422 when it is not a string of at most 100 characters. */
+    private function searchTerm(Request $request): string
+    {
+        $raw = $request->query('q', '');
+        if (is_string($raw)) {
+            $request->merge(['q' => trim($raw)]);
+        }
+
+        $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        return trim((string) ($validated['q'] ?? ''));
+    }
+
     /** Saved column layout, pruned of fields that no longer exist. */
     private function columns($user): array
     {
         $ids = $user->customFields->pluck('id')->map(fn ($id) => "cf:$id")->all();
-        $allowed = [...\App\Http\Controllers\Api\ItemColumns::BUILTIN, ...$ids];
+        $allowed = [...ItemColumns::BUILTIN, ...$ids];
 
         return array_values(array_filter(
-            $user->items_columns ?? \App\Http\Controllers\Api\ItemColumns::DEFAULT,
+            $user->items_columns ?? ItemColumns::DEFAULT,
             fn ($c) => in_array($c, $allowed, true),
         ));
     }
