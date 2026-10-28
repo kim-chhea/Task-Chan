@@ -14,6 +14,8 @@ import AppLayout from '@/Layouts/AppLayout';
 import { attachmentErrorText, ATTACHMENT_ACCEPT, clientFileError } from '@/lib/attachments';
 import { api, apiUrl, ApiError } from '@/lib/api';
 import { fileSize, longDay, PRIORITY_LABEL, shortDay, STATUS_LABEL, todayIso, TYPE_LABEL } from '@/lib/format';
+import { liftMood } from '@/lib/streakMood';
+import { useRestingMood } from '@/Components/useRestingMood';
 import { rewardPreview } from '@/lib/tokens';
 import type { CustomFieldDto } from '@/lib/columns';
 import type { ItemDto, ItemStatus, MasterRecordRef, PageProps } from '@/types';
@@ -65,6 +67,7 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
     const [title, setTitle] = useState(item.title);
     const editingTitle = useRef(false);
     const { rules } = usePage<PageProps>().props;
+    const resting = useRestingMood();
     const timer = useRef<number>(0);
     const fileInput = useRef<HTMLInputElement>(null);
     useEffect(() => {
@@ -75,6 +78,7 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
     useEffect(() => () => window.clearTimeout(timer.current), []);
 
     const isDone = status === 'done';
+    const mood = liftMood(cheer ? 'cheer' : isDone ? 'happy' : 'idle', resting);
     const doneCount = subs.filter((s) => s.done).length;
     const reload = (only: string[]) => router.reload({ only });
     const fail = (e: unknown) => toast(e instanceof ApiError ? e.message : 'Something went wrong.');
@@ -234,8 +238,8 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
                 <aside className="flex flex-col gap-4">
                     <Card rise tone={isDone ? 'yellow' : 'soft-yellow'} className="flex flex-col gap-3 overflow-hidden">
                         {burst > 0 && isDone && <span key={burst} className="float absolute right-4 top-3 rounded-lg border-2 border-ink bg-white px-2.5 py-1 font-display text-sm">+{item.reward}</span>}
-                        <div className="flex items-center gap-3">
-                            <Mascot mascot={ch.mascot} {...ch.kai} mood={cheer ? 'cheer' : isDone ? 'happy' : 'idle'} size={84} />
+                        <div className="flex items-center gap-3" data-mood={mood}>
+                            <Mascot mascot={ch.mascot} {...ch.kai} mood={mood} size={84} />
                             <div className="flex flex-col gap-0.5">
                                 <span className="text-xs font-bold">{isDone ? 'Claimed!' : 'Reward when done'}</span>
                                 <span className="flex items-center gap-1.5 font-display text-[32px] leading-none"><Coin size={26} />{item.reward}</span>

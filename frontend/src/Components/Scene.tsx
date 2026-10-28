@@ -15,7 +15,7 @@ export default function Scene({ mood, message, messageKey = 0, size = 150 }: Pro
     const partnerSize = Math.round(size * 0.64);
 
     return (
-        <div className="relative hidden shrink-0 items-end md:flex" style={{ height: size * 1.2 }}>
+        <div className="relative hidden shrink-0 items-end md:flex" style={{ height: size * 1.2 }} data-mood={mood}>
             {message && (
                 <div
                     key={messageKey}
