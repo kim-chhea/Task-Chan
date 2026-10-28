@@ -57,6 +57,7 @@ Route::middleware(['auth:sanctum', 'throttle:240,1'])->group(function () {
     Route::patch('profile', [ProfileController::class, 'update']);
     Route::delete('profile', [ProfileController::class, 'destroy']);
     Route::apiResource('master-records', MasterRecordController::class);
+    Route::post('master-records/{masterRecord}/spawn', [MasterRecordController::class, 'spawn']);
 
     Route::get('items', [ItemController::class, 'index']);
     Route::get('items/{item}', [ItemController::class, 'show']);
@@ -73,6 +74,7 @@ Route::middleware(['auth:sanctum', 'throttle:240,1'])->group(function () {
     Route::get('attachments/{attachment}', [AttachmentController::class, 'download'])->name('attachments.download');
     Route::delete('attachments/{attachment}', [AttachmentController::class, 'destroy']);
 
+    Route::post('items/{item}/follow-ups', [ItemApiController::class, 'followUps']);
     Route::post('items/{item}/links', [ItemLinkController::class, 'store']);
     Route::delete('items/{item}/links/{linked}', [ItemLinkController::class, 'destroy']);
 
