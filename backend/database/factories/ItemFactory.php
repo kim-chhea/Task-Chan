@@ -23,6 +23,7 @@ class ItemFactory extends Factory
             'priority' => Priority::Medium,
             'sector' => fake()->randomElement(['Banking', 'Exams', 'Admin', 'Finance', 'Records']),
             'deadline' => now()->addDays(3)->toDateString(),
+            'someday' => false,
             'received_at' => now()->toDateString(),
         ];
     }

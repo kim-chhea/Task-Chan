@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Enums\ItemStatus;
 use App\Http\Resources\ItemResource;
 use App\Models\Item;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class TodayController extends Controller
 {
@@ -30,7 +30,11 @@ class TodayController extends Controller
         $dueToday = $relevant->filter($isDueToday)->values();
         $rest = $relevant->reject($isDueToday);
         $inProgress = $rest->where('status', ItemStatus::InProgress)->values();
-        $comingUp = $rest->where('status', ItemStatus::NotStarted)->take(8)->values();
+        // Scheduled work only. Inbox (no deadline) and Someday stay off this list.
+        $comingUp = $rest->where('status', ItemStatus::NotStarted)
+            ->reject(fn (Item $i) => $i->isInbox() || $i->isSomeday())
+            ->take(8)
+            ->values();
 
         $weekStart = now()->startOfWeek();
         $weekEnd = now()->endOfWeek();
@@ -65,6 +69,9 @@ class TodayController extends Controller
             'week' => $week,
             'weekRange' => $weekStart->format('j M').' – '.$weekEnd->format('j M'),
             'weekDone' => $base()->whereBetween('completed_at', [$weekStart, $weekEnd])->count(),
+            'counts' => [
+                'inbox' => $base()->inbox()->count(),
+            ],
         ]);
     }
 }

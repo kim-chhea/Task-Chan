@@ -16,6 +16,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\BootstrapController;
 use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\InboxController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\LockerController;
 use App\Http\Controllers\MasterRecordController;
@@ -48,6 +49,7 @@ Route::middleware(['auth:sanctum', 'throttle:240,1'])->group(function () {
 
     // Screen data (one endpoint per screen).
     Route::get('today', [TodayController::class, 'index']);
+    Route::get('inbox', [InboxController::class, 'index']);
     Route::get('calendar', [CalendarController::class, 'index']);
     Route::get('review', [ReviewController::class, 'index']);
     Route::get('locker', [LockerController::class, 'index']);
