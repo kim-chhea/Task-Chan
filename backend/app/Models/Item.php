@@ -19,7 +19,7 @@ class Item extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'user_id', 'number', 'title', 'type', 'status', 'priority', 'sector', 'deadline', 'received_at',
+        'user_id', 'number', 'title', 'type', 'status', 'priority', 'sector', 'deadline', 'someday', 'received_at',
         'notes', 'completed_at', 'reward_tokens', 'completion_cycle', 'status_before_done', 'custom_values', 'master_record_id',
     ];
 
@@ -30,6 +30,7 @@ class Item extends Model
             'status' => ItemStatus::class,
             'priority' => Priority::class,
             'deadline' => 'date:Y-m-d',
+            'someday' => 'boolean',
             'received_at' => 'date:Y-m-d',
             'completed_at' => 'datetime',
             'notes' => 'array',
@@ -60,6 +61,33 @@ class Item extends Model
     public function links(): BelongsToMany
     {
         return $this->belongsToMany(Item::class, 'item_links', 'item_id', 'linked_item_id');
+    }
+
+    /** Open, undated, and not parked. */
+    public function isInbox(): bool
+    {
+        return $this->status !== ItemStatus::Done
+            && $this->deadline === null
+            && $this->someday === false;
+    }
+
+    /** Open and parked. A deadline does not take an item out of Someday. */
+    public function isSomeday(): bool
+    {
+        return $this->status !== ItemStatus::Done && $this->someday === true;
+    }
+
+    public function scopeInbox(Builder $query): void
+    {
+        $query->where('status', '!=', ItemStatus::Done->value)
+            ->whereNull('deadline')
+            ->where('someday', false);
+    }
+
+    public function scopeSomeday(Builder $query): void
+    {
+        $query->where('status', '!=', ItemStatus::Done->value)
+            ->where('someday', true);
     }
 
     /** Case-insensitive title or notes match. `%` and `_` in the term are literal. */

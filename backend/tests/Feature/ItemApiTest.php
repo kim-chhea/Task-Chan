@@ -22,6 +22,7 @@ function mine(User $u, array $attrs = []): Item
 it('requires authentication for everything', function () {
     $this->postJson('/api/items', ['title' => 'x'])->assertUnauthorized();
     $this->getJson('/api/today')->assertUnauthorized();
+    $this->getJson('/api/inbox')->assertUnauthorized();
     $this->getJson('/api/locker')->assertUnauthorized();
 });
 
@@ -182,7 +183,7 @@ it('serves every screen endpoint for a logged-in user', function () {
     $case = MasterRecord::create(['user_id' => $this->user->id, 'code' => 'MR-031', 'title' => 'Exam']);
     $this->actingAs($this->user);
 
-    foreach (['/today', '/items', '/calendar', '/review', '/locker', '/master-records', "/items/{$item->id}", "/master-records/{$case->id}", '/calendar?month=2026-11', '/profile'] as $url) {
+    foreach (['/today', '/inbox', '/items', '/calendar', '/review', '/locker', '/master-records', "/items/{$item->id}", "/master-records/{$case->id}", '/calendar?month=2026-11', '/profile'] as $url) {
         $this->getJson("/api$url")->assertOk();
     }
 });

@@ -3,10 +3,11 @@
 namespace App\Http\Resources;
 
 use App\Enums\ItemStatus;
+use App\Models\Item;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/** @mixin \App\Models\Item */
+/** @mixin Item */
 class ItemResource extends JsonResource
 {
     public function toArray(Request $request): array
@@ -22,6 +23,7 @@ class ItemResource extends JsonResource
             'priority' => $this->priority->value,
             'sector' => $this->sector,
             'deadline' => $this->deadline?->toDateString(),
+            'someday' => $this->someday,
             'received_at' => $this->received_at?->toDateString(),
             'completed_at' => $this->completed_at?->toIso8601String(),
             'done' => $done,

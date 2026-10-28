@@ -24,17 +24,26 @@ class ItemApiController extends Controller
     {
         $user = $request->user();
 
-        $item = DB::transaction(fn () => Item::create([
-            'user_id' => $user->id,
-            'number' => Item::nextNumber($user->id),
-            'title' => $request->string('title')->trim()->toString(),
-            'type' => $request->input('type', ItemType::Task->value),
-            'priority' => $request->input('priority', Priority::Medium->value),
-            'sector' => $request->input('sector'),
-            'deadline' => $request->input('deadline'),
-            'master_record_id' => $request->input('master_record_id'),
-            'received_at' => now()->toDateString(),
-        ]));
+        $validated = $request->validated();
+
+        $item = DB::transaction(function () use ($user, $request, $validated) {
+            $attributes = [
+                'user_id' => $user->id,
+                'number' => Item::nextNumber($user->id),
+                'title' => $request->string('title')->trim()->toString(),
+                'type' => $request->input('type', ItemType::Task->value),
+                'priority' => $request->input('priority', Priority::Medium->value),
+                'sector' => $request->input('sector'),
+                'deadline' => $request->input('deadline'),
+                'master_record_id' => $request->input('master_record_id'),
+                'received_at' => now()->toDateString(),
+            ];
+            if (array_key_exists('someday', $validated)) {
+                $attributes['someday'] = $validated['someday'];
+            }
+
+            return Item::create($this->normalizeSomeday($attributes));
+        });
 
         return $this->payload($item->fresh(), 201);
     }
@@ -45,7 +54,7 @@ class ItemApiController extends Controller
         if (array_key_exists('custom_values', $data)) {
             $data['custom_values'] = CustomValues::merge($request->user(), $data['custom_values'] ?? [], $item->custom_values ?? []) ?: null;
         }
-        $item->update($data);
+        $item->update($this->normalizeSomeday($data));
 
         return $this->payload($item);
     }
@@ -79,6 +88,32 @@ class ItemApiController extends Controller
         $item->delete();
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A non-null deadline in this payload leaves Someday.
+     * Parking (someday true) clears the deadline. A deadline sent alongside someday wins.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normalizeSomeday(array $data): array
+    {
+        if (array_key_exists('someday', $data)) {
+            $data['someday'] = filter_var($data['someday'], FILTER_VALIDATE_BOOLEAN);
+        }
+
+        if (array_key_exists('deadline', $data) && $data['deadline'] !== null) {
+            $data['someday'] = false;
+
+            return $data;
+        }
+
+        if (($data['someday'] ?? false) === true) {
+            $data['deadline'] = null;
+        }
+
+        return $data;
     }
 
     /** Every response carries the authoritative balance so the UI can reconcile. */

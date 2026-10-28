@@ -21,6 +21,7 @@ class UpdateItemRequest extends FormRequest
             'type' => ['sometimes', Rule::enum(ItemType::class)],
             'priority' => ['sometimes', Rule::enum(Priority::class)],
             'deadline' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'someday' => ['sometimes', 'boolean'],
             'sector' => ['sometimes', 'nullable', 'string', 'max:80'],
             'custom_values' => ['sometimes', 'nullable', 'array', 'max:40'],
             'notes' => ['sometimes', 'nullable', 'array', 'max:1000'],
