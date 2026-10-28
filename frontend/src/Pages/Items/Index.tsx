@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@/runtime';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ColumnsPanel from '@/Components/ColumnsPanel';
 import EmptyState from '@/Components/EmberEmpty';
 import { FilterChip, TypeChip } from '@/Components/ui/Chip';
@@ -12,7 +12,7 @@ import type { ItemDto } from '@/types';
 
 interface Props {
     items: ItemDto[];
-    filters: { status: string; type: string; sector: string; range: string };
+    filters: { status: string; type: string; sector: string; range: string; q: string };
     total: number;
     matched: number;
     openTokens: number;
@@ -60,19 +60,54 @@ function Cell({ col, r }: { col: ColumnDef; r: ItemDto }) {
     }
 }
 
-export default function Index({ items, filters, total, matched, openTokens, sectors, fields, columns }: Props) {
+const VISIT = { preserveState: true, preserveScroll: true, replace: true, only: ['items', 'filters'] };
+
+export default function Index({ items, filters: incoming, total, matched, openTokens, sectors, fields, columns }: Props) {
+    const filters = { ...incoming, q: incoming.q ?? '' };
+    const filtersRef = useRef(filters);
+    filtersRef.current = filters;
+    const applied = useRef(filters.q);
+    const timer = useRef<number | undefined>(undefined);
+    const [text, setText] = useState(filters.q);
     const [loading, setLoading] = useState(false);
+
     useEffect(() => {
         const off = [router.on('start', () => setLoading(true)), router.on('finish', () => setLoading(false))];
         return () => off.forEach((f) => f());
     }, []);
 
+    // Back/forward (or the API echoing q) wins over a draft the user already sent.
+    useEffect(() => {
+        if (filters.q === applied.current) return;
+        window.clearTimeout(timer.current);
+        applied.current = filters.q;
+        setText(filters.q);
+    }, [filters.q]);
+
+    useEffect(() => {
+        const next = text.trim().slice(0, 100);
+        if (next === applied.current) return;
+        timer.current = window.setTimeout(() => {
+            applied.current = next;
+            setText(next);
+            router.get('/items', { ...filtersRef.current, q: next }, VISIT);
+        }, 300);
+        return () => window.clearTimeout(timer.current);
+    }, [text]);
+
     const cols = useMemo(() => resolveColumns(columns, fields), [columns, fields]);
     const grid = gridTemplate(cols);
     const showSector = cols.some((c) => c.key === 'sector');
 
-    const go = (patch: Partial<Props['filters']>) =>
-        router.get('/items', { ...filters, ...patch }, { preserveState: true, preserveScroll: true, replace: true, only: ['items', 'filters'] });
+    const go = (patch: Partial<Props['filters']>) => {
+        window.clearTimeout(timer.current);
+        const q = (patch.q !== undefined ? patch.q : text).trim().slice(0, 100);
+        applied.current = q;
+        setText(q);
+        router.get('/items', { ...filtersRef.current, ...patch, q }, VISIT);
+    };
+
+    const clearSearch = () => go({ q: '' });
 
     return (
         <>
@@ -84,13 +119,42 @@ export default function Index({ items, filters, total, matched, openTokens, sect
                 </div>
             </PageHeader>
 
-            <div className="rise relative flex flex-wrap items-center gap-3.5" style={{ animationDelay: '0.1s' }}>
+            <div className="rise relative flex flex-col gap-3.5 sm:flex-row sm:flex-wrap sm:items-center" style={{ animationDelay: '0.1s' }}>
                 <div role="group" aria-label="Status" className="inline-flex rounded-[11px] border-2 border-ink bg-white p-1">
                     {STATUS_TABS.map(([k, label]) => (
                         <button key={k} type="button" aria-pressed={filters.status === k} onClick={() => go({ status: k })} className={`min-h-9 rounded-lg px-3.5 text-[13px] font-bold ${filters.status === k ? 'bg-ink text-white' : 'text-ink-2'}`}>
                             {label}
                         </button>
                     ))}
+                </div>
+                <div className="relative w-full sm:w-72">
+                    <label htmlFor="item-search" className="sr-only">Search items</label>
+                    <input
+                        id="item-search"
+                        type="search"
+                        value={text}
+                        maxLength={100}
+                        autoComplete="off"
+                        placeholder="Search items"
+                        onChange={(e) => setText(e.target.value.slice(0, 100))}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                go({ q: text });
+                            }
+                        }}
+                        className={`min-h-[42px] w-full rounded-[10px] border-2 border-ink bg-white py-0 pl-3 text-[13px] font-bold text-ink placeholder:font-semibold placeholder:text-ink-3 focus:border-ink focus:ring-2 focus:ring-accent [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden ${text ? 'pr-12' : 'pr-3'}`}
+                    />
+                    {text !== '' && (
+                        <button
+                            type="button"
+                            aria-label="Clear search"
+                            onClick={clearSearch}
+                            className="absolute right-1 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg border-2 border-ink bg-paper text-sm font-bold leading-none text-ink"
+                        >
+                            ×
+                        </button>
+                    )}
                 </div>
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Type">
                     {TYPES.map(([k, label]) => (
@@ -121,7 +185,11 @@ export default function Index({ items, filters, total, matched, openTokens, sect
                             {cols.map((c) => <Cell key={c.key} col={c} r={r} />)}
                         </Link>
                     ))}
-                    {items.length === 0 && <EmptyState />}
+                    {items.length === 0 && (
+                        filters.q.trim()
+                            ? <EmptyState>{`No matches for “${filters.q.trim()}”.`}</EmptyState>
+                            : <EmptyState />
+                    )}
                     {matched > items.length && <p className="border-t border-paper-3 px-4 py-3 text-[13px] font-semibold text-ink-3" role="status">Showing the newest {items.length} of {matched}. Use the filters to narrow the list.</p>}
                 </div>
             </div>
