@@ -2,17 +2,37 @@ import { Head, Link, router } from '@/runtime';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ColumnsPanel from '@/Components/ColumnsPanel';
 import EmptyState from '@/Components/EmberEmpty';
+import ItemColumnHeader from '@/Components/ItemColumnHeader';
 import { FilterChip, TypeChip } from '@/Components/ui/Chip';
 import { Coin } from '@/Components/ui/TokenPill';
 import AppLayout, { PageHeader } from '@/Layouts/AppLayout';
 import { formatCustom, gridTemplate, minTableWidth, resolveColumns, type ColumnDef, type CustomFieldDto } from '@/lib/columns';
 import { PRIORITY_LABEL, STATUS_LABEL, shortDay } from '@/lib/format';
+import { isSortableColumn, nextHeaderSort, readItemSort, type SortDir } from '@/lib/itemSort';
 import { openNewItem } from '@/lib/newItem';
 import type { ItemDto } from '@/types';
 
+export interface ItemFilters {
+    status: string;
+    type: string;
+    sector: string;
+    range: string;
+    q: string;
+    sort: string | null;
+    dir: SortDir | null;
+}
+
 interface Props {
     items: ItemDto[];
-    filters: { status: string; type: string; sector: string; range: string; q: string };
+    filters: {
+        status: string;
+        type: string;
+        sector: string;
+        range: string;
+        q?: string | null;
+        sort?: string | null;
+        dir?: string | null;
+    };
     total: number;
     matched: number;
     openTokens: number;
@@ -63,7 +83,16 @@ function Cell({ col, r }: { col: ColumnDef; r: ItemDto }) {
 const VISIT = { preserveState: true, preserveScroll: true, replace: true, only: ['items', 'filters'] };
 
 export default function Index({ items, filters: incoming, total, matched, openTokens, sectors, fields, columns }: Props) {
-    const filters = { ...incoming, q: incoming.q ?? '' };
+    const sortState = readItemSort(incoming.sort, incoming.dir);
+    const filters: ItemFilters = {
+        status: incoming.status,
+        type: incoming.type,
+        sector: incoming.sector,
+        range: incoming.range,
+        q: incoming.q ?? '',
+        sort: sortState.sort,
+        dir: sortState.dir,
+    };
     const filtersRef = useRef(filters);
     filtersRef.current = filters;
     const applied = useRef(filters.q);
@@ -99,12 +128,17 @@ export default function Index({ items, filters: incoming, total, matched, openTo
     const grid = gridTemplate(cols);
     const showSector = cols.some((c) => c.key === 'sector');
 
-    const go = (patch: Partial<Props['filters']>) => {
+    const go = (patch: Partial<ItemFilters>) => {
         window.clearTimeout(timer.current);
         const q = (patch.q !== undefined ? patch.q : text).trim().slice(0, 100);
         applied.current = q;
         setText(q);
         router.get('/items', { ...filtersRef.current, ...patch, q }, VISIT);
+    };
+
+    const sortBy = (key: string) => {
+        if (!isSortableColumn(key)) return;
+        go(nextHeaderSort(filters.sort, filters.dir, key));
     };
 
     const clearSearch = () => go({ q: '' });
@@ -177,8 +211,10 @@ export default function Index({ items, filters: incoming, total, matched, openTo
 
             <div aria-busy={loading} className={`rise relative overflow-x-auto rounded-[18px] border-2.5 border-ink bg-white shadow-hard transition-opacity ${loading ? 'opacity-60' : ''}`} style={{ animationDelay: '0.15s' }}>
                 <div style={{ minWidth: minTableWidth(cols) }}>
-                    <div role="row" className="grid gap-3 border-b-2.5 border-ink bg-paper-2 px-4 py-3 font-mono text-[11px] uppercase tracking-wider text-ink-3" style={{ gridTemplateColumns: grid }}>
-                        {cols.map((c) => <span key={c.key} className="truncate">{c.label}</span>)}
+                    <div role="row" className="grid items-center gap-3 border-b-2.5 border-ink bg-paper-2 px-4 py-3 font-mono text-[11px] uppercase tracking-wider text-ink-3" style={{ gridTemplateColumns: grid }}>
+                        {cols.map((c) => (
+                            <ItemColumnHeader key={c.key} col={c} sort={filters.sort} dir={filters.dir} onSort={sortBy} />
+                        ))}
                     </div>
                     {items.map((r, i) => (
                         <Link key={r.id} href={`/items/${r.id}`} className="row-hover rise grid min-h-[58px] items-center gap-3 border-b border-paper-3 px-4 text-sm text-ink no-underline last:border-b-0" style={{ gridTemplateColumns: grid, animationDelay: `${0.15 + Math.min(i, 12) * 0.04}s` }}>

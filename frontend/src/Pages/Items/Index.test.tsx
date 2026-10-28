@@ -26,10 +26,10 @@ const item: ItemDto = {
     reward: 15,
 };
 
-const filters = { status: 'all', type: 'ticket', sector: 'all', range: 'all', q: '' };
+const filters = { status: 'all', type: 'ticket', sector: 'all', range: 'all', q: '', sort: null, dir: null };
 
-function renderIndex(overrides: Partial<Parameters<typeof Index>[0]> = {}) {
-    return render(
+function page(overrides: Partial<Parameters<typeof Index>[0]> = {}) {
+    return (
         <MemoryRouter>
             <Index
                 items={[item]}
@@ -42,8 +42,12 @@ function renderIndex(overrides: Partial<Parameters<typeof Index>[0]> = {}) {
                 columns={['number', 'title', 'type', 'status', 'sector']}
                 {...overrides}
             />
-        </MemoryRouter>,
+        </MemoryRouter>
     );
+}
+
+function renderIndex(overrides: Partial<Parameters<typeof Index>[0]> = {}) {
+    return render(page(overrides));
 }
 
 describe('All items search', () => {
@@ -134,5 +138,101 @@ describe('All items search', () => {
     it('keeps the newest-of-matched banner', () => {
         renderIndex({ matched: 8 });
         expect(screen.getByRole('status').textContent).toBe('Showing the newest 1 of 8. Use the filters to narrow the list.');
+    });
+});
+
+describe('All items header sort', () => {
+    afterEach(() => {
+        cleanup();
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+    });
+
+    function header(name: string) {
+        return screen.getByRole('columnheader', { name });
+    }
+
+    it('cycles a column ascending, then descending, then back to the default order', () => {
+        const get = vi.spyOn(router, 'get').mockImplementation(() => {});
+        const view = renderIndex();
+
+        expect(header('Title').getAttribute('aria-sort')).toBe('none');
+        expect(header('Title').querySelector('[data-sort-dir]')).toBeNull();
+
+        fireEvent.click(header('Title'));
+        expect(get).toHaveBeenCalledTimes(1);
+        expect(get).toHaveBeenCalledWith('/items', { ...filters, sort: 'title', dir: 'asc' }, VISIT);
+
+        view.rerender(page({ filters: { ...filters, sort: 'title', dir: 'asc' } }));
+        expect(header('Title').getAttribute('aria-sort')).toBe('ascending');
+        expect(header('Title').querySelector('[data-sort-dir="asc"]')).toBeTruthy();
+        expect(header('Status').getAttribute('aria-sort')).toBe('none');
+        expect(header('No.').querySelector('[data-sort-dir]')).toBeNull();
+
+        fireEvent.click(header('Title'));
+        expect(get).toHaveBeenLastCalledWith('/items', { ...filters, sort: 'title', dir: 'desc' }, VISIT);
+
+        view.rerender(page({ filters: { ...filters, sort: 'title', dir: 'desc' } }));
+        expect(header('Title').getAttribute('aria-sort')).toBe('descending');
+        expect(header('Title').querySelector('[data-sort-dir="desc"]')).toBeTruthy();
+
+        fireEvent.click(header('Title'));
+        expect(get).toHaveBeenLastCalledWith('/items', { ...filters, sort: null, dir: null }, VISIT);
+
+        view.rerender(page({ filters }));
+        expect(header('Title').getAttribute('aria-sort')).toBe('none');
+        expect(header('Title').querySelector('[data-sort-dir]')).toBeNull();
+    });
+
+    it('starts the next column at ascending', () => {
+        const get = vi.spyOn(router, 'get').mockImplementation(() => {});
+        renderIndex({ filters: { ...filters, sort: 'title', dir: 'desc' } });
+        fireEvent.click(header('No.'));
+        expect(get).toHaveBeenCalledWith('/items', { ...filters, sort: 'number', dir: 'asc' }, VISIT);
+    });
+
+    it('keeps sort and dir when status, type, sector, range, or search change', () => {
+        vi.useFakeTimers();
+        const get = vi.spyOn(router, 'get').mockImplementation(() => {});
+        const sorted = { ...filters, sort: 'deadline', dir: 'asc' as const };
+        renderIndex({ filters: sorted, columns: ['number', 'title', 'type', 'status', 'sector', 'deadline'] });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Request' }));
+        expect(get).toHaveBeenLastCalledWith('/items', { ...sorted, type: 'request' }, VISIT);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Next 30 days' }));
+        expect(get).toHaveBeenLastCalledWith('/items', { ...sorted, range: '30' }, VISIT);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(get).toHaveBeenLastCalledWith('/items', { ...sorted, status: 'done' }, VISIT);
+
+        fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'Banking' } });
+        expect(get).toHaveBeenLastCalledWith('/items', { ...sorted, sector: 'Banking' }, VISIT);
+
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search items' }), { target: { value: 'ledger' } });
+        act(() => {
+            vi.advanceTimersByTime(300);
+        });
+        expect(get).toHaveBeenLastCalledWith('/items', { ...sorted, q: 'ledger' }, VISIT);
+    });
+
+    it('does not send sort from reward or custom headers', () => {
+        const get = vi.spyOn(router, 'get').mockImplementation(() => {});
+        renderIndex({
+            columns: ['title', 'reward', 'cf:7'],
+            fields: [{ id: 7, name: 'Client', type: 'text', options: [] }],
+        });
+
+        const reward = header('Reward');
+        const client = header('Client');
+        expect(reward.tagName).toBe('SPAN');
+        expect(client.tagName).toBe('SPAN');
+        expect(reward.hasAttribute('aria-sort')).toBe(false);
+        expect(client.hasAttribute('aria-sort')).toBe(false);
+        expect(header('Title').tagName).toBe('BUTTON');
+
+        fireEvent.click(reward);
+        fireEvent.click(client);
+        expect(get).not.toHaveBeenCalled();
     });
 });
