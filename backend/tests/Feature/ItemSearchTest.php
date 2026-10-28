@@ -26,6 +26,8 @@ it('lists the same items when q is omitted and echoes an empty filter', function
         'sector' => 'all',
         'range' => 'all',
         'q' => '',
+        'sort' => null,
+        'dir' => null,
     ])->and($res->json('matched'))->toBe(2)
         ->and($res->json('total'))->toBe(2)
         ->and(collect($res->json('items'))->pluck('id')->sort()->values()->all())
