@@ -42,6 +42,7 @@ const item = {
     priority: 'medium' as const,
     sector: null,
     deadline: '2026-10-25',
+    someday: false,
     received_at: '2026-10-20',
     completed_at: null,
     done: false,

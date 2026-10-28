@@ -20,6 +20,7 @@ const item: ItemDto = {
     priority: 'high',
     sector: 'Banking',
     deadline: '2026-11-07',
+    someday: false,
     received_at: '2026-10-20',
     completed_at: null,
     done: false,

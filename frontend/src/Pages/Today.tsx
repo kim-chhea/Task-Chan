@@ -15,17 +15,9 @@ import { dueText, isOverdue, longDay } from '@/lib/format';
 import { dueLabel, parseQuickAdd } from '@/lib/parser';
 import { openNewItem } from '@/lib/newItem';
 import { weekDoneAdjusted } from '@/lib/tokens';
+import { inboxLinkLabel } from '@/lib/triage';
 import { useRestingMood } from '@/Components/useRestingMood';
-import type { ItemDto } from '@/types';
-
-interface Props {
-    today: string;
-    groups: { due: ItemDto[]; in_progress: ItemDto[]; coming_up: ItemDto[] };
-    progress: { done: number; total: number };
-    week: { dow: string; n: number; date: string; count: number; today: boolean }[];
-    weekRange: string;
-    weekDone: number;
-}
+import type { ItemDto, TodayResponse } from '@/types';
 
 interface StatusResponse {
     item: ItemDto;
@@ -39,7 +31,7 @@ function greeting(today: string) {
     return longDay(today).replace(/^(\w+) (.*)$/, '$1 · $2');
 }
 
-export default function Today({ today, groups, week, weekRange, weekDone }: Props) {
+export default function Today({ today, groups, week, weekRange, weekDone, counts }: TodayResponse) {
     const { reconcile, optimistic } = useGame();
     const toast = useToast();
     const resting = useRestingMood();
@@ -82,7 +74,7 @@ export default function Today({ today, groups, week, weekRange, weekDone }: Prop
             });
             react(`Got it! ${cap(parsed.type)} locked in for ${dueLabel(parsed.deadline)}. ✦`);
             setText('');
-            router.reload({ only: ['groups', 'progress', 'week', 'weekDone', 'game'] });
+            router.reload({ only: ['groups', 'progress', 'week', 'weekDone', 'game', 'counts'] });
         } catch (e) {
             toast(e instanceof ApiError ? e.message : 'Could not add that item.');
         } finally {
@@ -106,7 +98,7 @@ export default function Today({ today, groups, week, weekRange, weekDone }: Prop
                 const got = res.awarded + res.streak_bonus;
                 react(left === 0 ? `Clear! +${got} tokens. Today is done, GG!` : `+${got} tokens! ${left} left today.`);
             }
-            router.reload({ only: ['groups', 'progress', 'week', 'weekDone', 'game'] });
+            router.reload({ only: ['groups', 'progress', 'week', 'weekDone', 'game', 'counts'] });
         } catch (e) {
             setOverride((o) => ({ ...o, [item.id]: !nowDone })); // roll back
             router.reload({ only: ['game', 'groups'] }); // resync balance + list from the server
@@ -133,6 +125,16 @@ export default function Today({ today, groups, week, weekRange, weekDone }: Prop
                     <h1 className="font-display text-[40px] font-normal leading-none md:text-[56px]">
                         Today<span className="text-accent">.</span>
                     </h1>
+                    {typeof counts?.inbox === 'number' && (
+                        <Link
+                            href="/inbox"
+                            aria-label={inboxLinkLabel(counts.inbox)}
+                            className="inline-flex w-fit items-center gap-1.5 rounded-lg border-2 border-ink bg-pink-soft px-2.5 py-1 text-[13px] font-bold text-ink no-underline"
+                        >
+                            {inboxLinkLabel(counts.inbox)}
+                            <span aria-hidden="true">→</span>
+                        </Link>
+                    )}
                 </div>
                 <Card hover className="flex w-full flex-col gap-2.5 rounded-2xl !px-4 !py-3.5 md:w-[290px]">
                     <div className="flex items-baseline justify-between">
