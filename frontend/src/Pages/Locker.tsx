@@ -9,6 +9,7 @@ import { Coin } from '@/Components/ui/TokenPill';
 import { useToast } from '@/Components/ui/Toast';
 import AppLayout from '@/Layouts/AppLayout';
 import { api, ApiError } from '@/lib/api';
+import { streakLength as ruleStreakLength, streakMood } from '@/lib/streakMood';
 import { lockerButton } from '@/lib/tokens';
 import type { Category, GameState, PageProps } from '@/types';
 
@@ -25,7 +26,7 @@ interface LockerState { balance: number; mascot: GameState['mascot']; equipped: 
 const TAB_NAME: Record<Category, string> = { hair: 'Hair', outfit: 'Outfit', gear: 'Gear', partner: 'Partner', stage: 'Stage' };
 
 export default function Locker({ owned: ownedProp, categories, rewards, earlyBonus, streakBonus, streakLength }: Props) {
-    const { catalog, game } = usePage<PageProps>().props;
+    const { catalog, game, rules } = usePage<PageProps>().props;
     const { balance, reconcile } = useGame();
     const toast = useToast();
     const [tab, setTab] = useState<Category>('hair');
@@ -39,6 +40,8 @@ export default function Locker({ owned: ownedProp, categories, rewards, earlyBon
     useEffect(() => () => { window.clearTimeout(timer.current); window.clearTimeout(spentTimer.current); }, []);
 
     const ch = useCharacter(equipped);
+    const resting = streakMood(game.streak, ruleStreakLength(rules, streakLength));
+    const mood = cheer ? 'cheer' : resting;
     const stage = ch.stage;
     const partnerName = catalog.partner[equipped.partner]?.name ?? 'Ember';
 
@@ -95,9 +98,9 @@ export default function Locker({ owned: ownedProp, categories, rewards, earlyBon
                         <div className="speed absolute inset-0 opacity-60" aria-hidden="true" style={{ background: `repeating-conic-gradient(from 0deg at 50% 60%, ${stage.lines} 0deg 4deg, transparent 4deg 15deg)` }} />
                         {stage.dark && [['12%', '14%'], ['82%', '20%'], ['22%', '62%'], ['88%', '58%']].map(([l, t], i) => <span key={i} className="twinkle absolute text-lg text-mint" style={{ left: l, top: t, animationDelay: `${i * 0.4}s` }} aria-hidden="true">✦</span>)}
                         <span className={`absolute left-4 top-3.5 rounded-lg border-2 border-ink px-2.5 py-1 font-mono text-[11px] font-semibold tracking-wider ${stage.dark ? 'bg-ink text-white' : 'bg-white'}`}>{stage.name.toUpperCase()} STAGE</span>
-                        <div className="relative flex items-end pb-4">
-                            <Mascot mascot={ch.mascot} {...ch.kai} mood={cheer ? 'cheer' : 'idle'} size={270} />
-                            <Partner partner={equipped.partner} size={150} className={`-ml-10 ${cheer ? 'cheer' : ''}`} />
+                        <div className="relative flex items-end pb-4" data-mood={mood}>
+                            <Mascot mascot={ch.mascot} {...ch.kai} mood={mood} size={270} />
+                            <Partner partner={equipped.partner} size={150} className={`-ml-10 ${mood === 'cheer' ? 'cheer' : ''}`} />
                         </div>
                     </div>
                     <div className="flex items-center justify-between gap-3 p-4">

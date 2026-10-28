@@ -63,5 +63,11 @@ export type PageProps<T extends Record<string, unknown> = Record<string, unknown
     auth: { user: User };
     game: GameState;
     catalog: Catalog;
-    rules: { rewards: Record<Priority, number>; early_bonus: number };
+    rules: {
+        rewards: Record<Priority, number>;
+        early_bonus: number;
+        /** Present once bootstrap sends locker streak rules. Mood falls back to 5 / 50 without them. */
+        streak_bonus?: number;
+        streak_length?: number;
+    };
 };

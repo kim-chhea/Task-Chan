@@ -15,6 +15,7 @@ import { dueText, isOverdue, longDay } from '@/lib/format';
 import { dueLabel, parseQuickAdd } from '@/lib/parser';
 import { openNewItem } from '@/lib/newItem';
 import { weekDoneAdjusted } from '@/lib/tokens';
+import { useRestingMood } from '@/Components/useRestingMood';
 import type { ItemDto } from '@/types';
 
 interface Props {
@@ -41,8 +42,9 @@ function greeting(today: string) {
 export default function Today({ today, groups, week, weekRange, weekDone }: Props) {
     const { reconcile, optimistic } = useGame();
     const toast = useToast();
+    const resting = useRestingMood();
     const [text, setText] = useState('');
-    const [mood, setMood] = useState<Mood>('idle');
+    const [burst, setBurst] = useState<Mood | null>(null);
     const [msg, setMsg] = useState<{ text: string | null; key: number }>({ text: null, key: 0 });
     const [override, setOverride] = useState<Record<number, boolean>>({});
     const [busy, setBusy] = useState(false);
@@ -54,11 +56,12 @@ export default function Today({ today, groups, week, weekRange, weekDone }: Prop
 
     const parsed = useMemo(() => parseQuickAdd(text), [text]);
 
+    const mood = burst ?? resting;
     const react = (message: string, m: Mood = 'cheer') => {
         window.clearTimeout(timer.current);
-        setMood(m);
+        setBurst(m);
         setMsg((p) => ({ text: message, key: p.key + 1 }));
-        timer.current = window.setTimeout(() => setMood('idle'), 1400);
+        timer.current = window.setTimeout(() => setBurst(null), 1400);
     };
 
     const isDone = (i: ItemDto) => override[i.id] ?? i.done;
@@ -79,7 +82,7 @@ export default function Today({ today, groups, week, weekRange, weekDone }: Prop
             });
             react(`Got it! ${cap(parsed.type)} locked in for ${dueLabel(parsed.deadline)}. ✦`);
             setText('');
-            router.reload({ only: ['groups', 'progress', 'week', 'weekDone'] });
+            router.reload({ only: ['groups', 'progress', 'week', 'weekDone', 'game'] });
         } catch (e) {
             toast(e instanceof ApiError ? e.message : 'Could not add that item.');
         } finally {
@@ -103,7 +106,7 @@ export default function Today({ today, groups, week, weekRange, weekDone }: Prop
                 const got = res.awarded + res.streak_bonus;
                 react(left === 0 ? `Clear! +${got} tokens. Today is done, GG!` : `+${got} tokens! ${left} left today.`);
             }
-            router.reload({ only: ['groups', 'progress', 'week', 'weekDone'] });
+            router.reload({ only: ['groups', 'progress', 'week', 'weekDone', 'game'] });
         } catch (e) {
             setOverride((o) => ({ ...o, [item.id]: !nowDone })); // roll back
             router.reload({ only: ['game', 'groups'] }); // resync balance + list from the server
@@ -169,7 +172,7 @@ export default function Today({ today, groups, week, weekRange, weekDone }: Prop
                         {parsed.priority && <InfoChip label="Priority" className="bg-pink-soft">{cap(parsed.priority)}</InfoChip>}
                     </div>
                 </div>
-                <Scene mood={mood} message={bubble} messageKey={msg.key} />
+                <Scene key={msg.key} mood={mood} message={bubble} messageKey={msg.key} />
             </section>
 
             <div className="relative grid grid-cols-1 items-start gap-9 lg:grid-cols-[minmax(0,1fr)_300px]">

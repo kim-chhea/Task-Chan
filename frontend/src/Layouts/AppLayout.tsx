@@ -1,5 +1,5 @@
 import { Link, router, usePage } from '@/runtime';
-import { useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import AccountMenu from '@/Components/AccountMenu';
 import NewItemModal from '@/Components/NewItemModal';
 import { onOpenNewItem, openNewItem } from '@/lib/newItem';
@@ -18,19 +18,33 @@ const NAV = [
     { href: '/locker', match: '/locker', label: 'Locker', jp: '景品', icon: <path d="M8 3l4 2 4-2 5 4-3 3-2-1v12H8V9l-2 1-3-3z" strokeLinejoin="round" /> },
 ];
 
+const MoodMark = lazy(() => import('@/Components/MoodMark'));
+
+function MoodSlot({ size }: { size: number }) {
+    const height = Math.round((size * 240) / 200);
+    return (
+        <Suspense fallback={<span className="inline-block shrink-0" style={{ width: size, height }} aria-hidden="true" />}>
+            <MoodMark size={size} />
+        </Suspense>
+    );
+}
+
 function TokenCard() {
     const { balance, gain } = useGame();
     return (
         <Link
             href="/locker"
-            className="card-hover relative mt-auto flex flex-col gap-1.5 rounded-[14px] border-2.5 border-ink bg-sun-soft p-3.5 text-ink no-underline shadow-hard-md"
+            className="card-hover relative mt-auto flex items-center gap-2 rounded-[14px] border-2.5 border-ink bg-sun-soft p-3.5 text-ink no-underline shadow-hard-md"
         >
-            <span className="text-xs font-bold">Your tokens</span>
-            <span className="flex items-center gap-2 font-display text-2xl" aria-live="polite" aria-label={`${balance} tokens`}>
-                <Coin />
-                {balance}
+            <MoodSlot size={48} />
+            <span className="flex min-w-0 flex-col gap-1.5">
+                <span className="text-xs font-bold">Your tokens</span>
+                <span className="flex items-center gap-2 font-display text-2xl" aria-live="polite" aria-label={`${balance} tokens`}>
+                    <Coin />
+                    {balance}
+                </span>
+                <span className="text-xs font-bold text-accent-ink">Spend in Locker →</span>
             </span>
-            <span className="text-xs font-bold text-accent-ink">Spend in Locker →</span>
             {gain && (
                 <span key={gain.key} className="float absolute -top-3.5 right-2.5 rounded-lg border-2 border-ink bg-sun px-2 py-0.5 font-display text-xs">
                     {gain.amount > 0 ? '+' : '−'}
@@ -106,7 +120,7 @@ function Shell({ children }: { children: ReactNode }) {
                 <span className="font-display">Task-Chan</span>
                 <div className="ml-auto flex items-center gap-2">
                     <button type="button" onClick={openNewItem} className="min-h-11 rounded-[10px] border-2 border-ink bg-accent px-3 text-[13px] font-bold text-white">+ New</button>
-                    <Link href="/locker" className="flex min-h-11 items-center gap-1.5 font-display text-sm text-ink no-underline"><MobileBalance /></Link>
+                    <Link href="/locker" className="flex min-h-11 items-center gap-1.5 font-display text-sm text-ink no-underline"><MoodSlot size={28} /><MobileBalance /></Link>
                     <AccountMenu name={auth.user.name} onLogout={logout} />
                 </div>
             </header>
