@@ -1,8 +1,11 @@
 <?php
 
+use App\Enums\FocusSessionStatus;
 use App\Enums\ItemStatus;
+use App\Enums\LedgerReason;
 use App\Enums\Priority;
 use App\Exceptions\InsufficientTokensException;
+use App\Models\FocusSession;
 use App\Models\Item;
 use App\Models\OwnedCosmetic;
 use App\Models\TokenLedger;
@@ -179,6 +182,47 @@ it('refuses to undo an item whose tokens were already spent', function () {
 
     expect(fn () => $this->tokens->undo($items[0]->fresh(), ItemStatus::NotStarted))->toThrow(InsufficientTokensException::class);
     expect($items[0]->fresh()->status)->toBe(ItemStatus::Done)->and($this->user->balance())->toBe(0);
+});
+
+it('awards the configured focus bonus once per session', function (int $minutes, int $bonus) {
+    $item = $minutes === 25 ? makeItem($this->user, Priority::Low, null) : null;
+    $started = now();
+    $session = FocusSession::create([
+        'user_id' => $this->user->id,
+        'item_id' => $item?->id,
+        'planned_minutes' => $minutes,
+        'started_at' => $started,
+        'ends_at' => $started->copy()->addMinutes($minutes),
+        'status' => FocusSessionStatus::Running,
+        'awarded_tokens' => 0,
+    ]);
+
+    expect($this->tokens->awardFocus($session))->toBe($bonus)
+        ->and($this->tokens->awardFocus($session->fresh()))->toBe($bonus)
+        ->and($this->user->balance())->toBe($bonus);
+
+    $rows = TokenLedger::query()->where('reason', LedgerReason::FocusBonus)->get();
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]->delta)->toBe($bonus)
+        ->and($rows[0]->ref)->toBe("focus:{$session->id}")
+        ->and($rows[0]->item_id)->toBe($item?->id)
+        ->and($session->fresh()->status)->toBe(FocusSessionStatus::Running);
+})->with([[25, 10], [50, 20]]);
+
+it('refuses a focus length that is not a preset', function () {
+    $started = now();
+    $session = FocusSession::create([
+        'user_id' => $this->user->id,
+        'planned_minutes' => 15,
+        'started_at' => $started,
+        'ends_at' => $started->copy()->addMinutes(15),
+        'status' => FocusSessionStatus::Running,
+        'awarded_tokens' => 0,
+    ]);
+
+    expect(fn () => $this->tokens->awardFocus($session))->toThrow(InvalidArgumentException::class)
+        ->and($this->user->balance())->toBe(0)
+        ->and(TokenLedger::count())->toBe(0);
 });
 
 it('shows a streak of zero after a working day is missed', function () {
