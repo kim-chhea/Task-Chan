@@ -9,6 +9,7 @@ import { Coin } from '@/Components/ui/TokenPill';
 import { useToast } from '@/Components/ui/Toast';
 import AppLayout from '@/Layouts/AppLayout';
 import { api, ApiError } from '@/lib/api';
+import { focusEarnLine } from '@/lib/focus';
 import { streakLength as ruleStreakLength, streakMood } from '@/lib/streakMood';
 import { lockerButton } from '@/lib/tokens';
 import type { Category, GameState, PageProps } from '@/types';
@@ -73,6 +74,7 @@ export default function Locker({ owned: ownedProp, categories, rewards, earlyBon
     }
 
     const entries = Object.entries(catalog[tab]);
+    const focusLine = focusEarnLine(rules.focus);
     const isSwatch = tab === 'hair' || tab === 'outfit' || tab === 'stage';
     const outfitLine = `${catalog.hair[equipped.hair]?.name} hair · ${catalog.outfit[equipped.outfit]?.name} · ${catalog.gear[equipped.gear]?.name}`;
 
@@ -137,7 +139,11 @@ export default function Locker({ owned: ownedProp, categories, rewards, earlyBon
                     </div>
 
                     <div className="flex flex-col gap-3 rounded-2xl border-2 border-dashed border-ink bg-paper p-4">
-                        <div className="flex flex-col"><span className="font-mono text-[11px] tracking-wider">HOW TO EARN</span><span className="text-xs text-ink-3">Tokens land the moment you mark an item Done.</span></div>
+                        <div className="flex flex-col">
+                            <span className="font-mono text-[11px] tracking-wider">HOW TO EARN</span>
+                            <span className="text-xs text-ink-3">Tokens land the moment you mark an item Done.</span>
+                            {focusLine && <span className="text-xs text-ink-3">{focusLine}</span>}
+                        </div>
                         <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
                             <Earn n={rewards.low} t="Low priority done" />
                             <Earn n={rewards.medium} t="Medium priority done" />
