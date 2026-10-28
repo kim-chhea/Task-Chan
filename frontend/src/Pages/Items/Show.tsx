@@ -1,6 +1,9 @@
 import { Head, Link, router, usePage } from '@/runtime';
 import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Mascot } from '@/Components/characters';
+import FocusOverlay from '@/Components/FocusOverlay';
+import FocusPresetPicker from '@/Components/FocusPresetPicker';
+import { useFocusDesk } from '@/Components/useFocusDesk';
 import { useGame } from '@/Components/GameContext';
 import { useCharacter } from '@/Components/useCharacter';
 import Card from '@/Components/ui/Card';
@@ -69,6 +72,7 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
     const [title, setTitle] = useState(item.title);
     const editingTitle = useRef(false);
     const { rules } = usePage<PageProps>().props;
+    const focus = useFocusDesk();
     const resting = useRestingMood();
     const timer = useRef<number>(0);
     const fileInput = useRef<HTMLInputElement>(null);
@@ -165,6 +169,9 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
     return (
         <>
             <Head title={`#${item.number} ${item.title}`} />
+            {focus.session?.status === 'running' && (
+                <FocusOverlay session={focus.session} busy={focus.busy} onClaim={() => void focus.claim()} onCancel={() => void focus.cancel()} />
+            )}
             <nav aria-label="Breadcrumb" className="rise flex items-center gap-2 text-[13px] font-semibold text-ink-3">
                 <Link href="/items" className="text-accent-ink">All items</Link><span aria-hidden="true">/</span><span className="font-mono">#{item.number}</span>
             </nav>
@@ -276,6 +283,14 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
                             </div>
                         </div>
                         <span className="rounded-xl border-2 border-ink bg-white px-3 py-2 text-[13px] font-semibold" role="status">{kaiLine}</span>
+                        {!isDone && rules.focus && (
+                            <FocusPresetPicker
+                                itemTitle={item.title}
+                                rules={rules.focus}
+                                disabled={focus.busy || focus.session !== null}
+                                onPick={(minutes) => void focus.start(minutes, item.id)}
+                            />
+                        )}
                     </Card>
 
                     <Card rise className="flex flex-col gap-3 !p-4">
