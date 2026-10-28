@@ -3,16 +3,19 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\ChangeItemStatus;
+use App\Actions\CreateTaskBatch;
 use App\Enums\ItemStatus;
 use App\Enums\ItemType;
 use App\Enums\Priority;
 use App\Exceptions\InsufficientTokensException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreItemRequest;
+use App\Http\Requests\TaskLines;
 use App\Http\Requests\UpdateItemRequest;
 use App\Http\Resources\ItemResource;
 use App\Models\Item;
 use App\Services\CustomValues;
+use App\Support\Someday;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -42,10 +45,35 @@ class ItemApiController extends Controller
                 $attributes['someday'] = $validated['someday'];
             }
 
-            return Item::create($this->normalizeSomeday($attributes));
+            return Item::create(Someday::normalize($attributes));
         });
 
         return $this->payload($item->fresh(), 201);
+    }
+
+    public function followUps(Request $request, Item $item, CreateTaskBatch $create): JsonResponse
+    {
+        $this->authorize('manage', $item);
+
+        if ($item->type !== ItemType::Meeting) {
+            return response()->json([
+                'message' => 'Follow-ups only work on Meeting items.',
+            ], 422);
+        }
+
+        $created = $create($request->user(), TaskLines::validate($request), $item->master_record_id, $item);
+
+        return response()->json([
+            'items' => $create->present($created),
+            'linked_to' => [
+                'id' => $item->id,
+                'number' => str_pad((string) $item->number, 4, '0', STR_PAD_LEFT),
+                'title' => $item->title,
+                'type' => $item->type->value,
+            ],
+            'balance' => $request->user()->balance(),
+            'streak' => $request->user()->streak?->active() ?? 0,
+        ], 201);
     }
 
     public function update(UpdateItemRequest $request, Item $item): JsonResponse
@@ -54,7 +82,7 @@ class ItemApiController extends Controller
         if (array_key_exists('custom_values', $data)) {
             $data['custom_values'] = CustomValues::merge($request->user(), $data['custom_values'] ?? [], $item->custom_values ?? []) ?: null;
         }
-        $item->update($this->normalizeSomeday($data));
+        $item->update(Someday::normalize($data));
 
         return $this->payload($item);
     }
@@ -88,32 +116,6 @@ class ItemApiController extends Controller
         $item->delete();
 
         return response()->json(['ok' => true]);
-    }
-
-    /**
-     * A non-null deadline in this payload leaves Someday.
-     * Parking (someday true) clears the deadline. A deadline sent alongside someday wins.
-     *
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
-     */
-    private function normalizeSomeday(array $data): array
-    {
-        if (array_key_exists('someday', $data)) {
-            $data['someday'] = filter_var($data['someday'], FILTER_VALIDATE_BOOLEAN);
-        }
-
-        if (array_key_exists('deadline', $data) && $data['deadline'] !== null) {
-            $data['someday'] = false;
-
-            return $data;
-        }
-
-        if (($data['someday'] ?? false) === true) {
-            $data['deadline'] = null;
-        }
-
-        return $data;
     }
 
     /** Every response carries the authoritative balance so the UI can reconcile. */
