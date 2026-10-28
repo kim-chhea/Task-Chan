@@ -1,6 +1,9 @@
-import { Head, Link, router } from '@/runtime';
+import { Head, Link, router, usePage } from '@/runtime';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { Mood } from '@/Components/characters/palette';
+import FocusOverlay from '@/Components/FocusOverlay';
+import FocusPresetPicker from '@/Components/FocusPresetPicker';
+import { useFocusDesk } from '@/Components/useFocusDesk';
 import { useGame } from '@/Components/GameContext';
 import Scene from '@/Components/Scene';
 import Card from '@/Components/ui/Card';
@@ -17,7 +20,7 @@ import { openNewItem } from '@/lib/newItem';
 import { weekDoneAdjusted } from '@/lib/tokens';
 import { inboxLinkLabel } from '@/lib/triage';
 import { useRestingMood } from '@/Components/useRestingMood';
-import type { ItemDto, TodayResponse } from '@/types';
+import type { FocusRules, ItemDto, PageProps, TodayResponse } from '@/types';
 
 interface StatusResponse {
     item: ItemDto;
@@ -34,6 +37,8 @@ function greeting(today: string) {
 export default function Today({ today, groups, week, weekRange, weekDone, counts }: TodayResponse) {
     const { reconcile, optimistic } = useGame();
     const toast = useToast();
+    const { rules } = usePage<PageProps>().props;
+    const focus = useFocusDesk();
     const resting = useRestingMood();
     const [text, setText] = useState('');
     const [burst, setBurst] = useState<Mood | null>(null);
@@ -114,9 +119,16 @@ export default function Today({ today, groups, week, weekRange, weekDone, counts
 
     const bubble = msg.text ?? (text.trim() ? `A ${parsed.type}, due ${dueLabel(parsed.deadline)}? Hit Enter!` : 'What landed on your desk?');
 
+    const focusRow: FocusRow | null = rules.focus
+        ? { rules: rules.focus, running: focus.session !== null, busy: focus.busy, onStart: (itemId, minutes) => void focus.start(minutes, itemId) }
+        : null;
+
     return (
         <>
             <Head title="Today" />
+            {focus.session?.status === 'running' && (
+                <FocusOverlay session={focus.session} busy={focus.busy} onClaim={() => void focus.claim()} onCancel={() => void focus.cancel()} />
+            )}
             <div className="halftone pointer-events-none absolute -right-8 -top-8 h-[220px] w-[420px] opacity-[0.07]" aria-hidden="true" />
 
             <header className="rise relative flex flex-wrap items-end justify-between gap-6">
@@ -179,9 +191,9 @@ export default function Today({ today, groups, week, weekRange, weekDone, counts
 
             <div className="relative grid grid-cols-1 items-start gap-9 lg:grid-cols-[minmax(0,1fr)_300px]">
                 <div className="flex flex-col gap-6">
-                    <Group name="Due today" tag="bg-pink text-ink" items={groups.due} isDone={isDone} toggle={toggle} pending={pending} hot />
-                    <Group name="In progress" tag="bg-accent text-white" items={groups.in_progress} isDone={isDone} toggle={toggle} pending={pending} />
-                    <Group name="Coming up" tag="bg-white text-ink" items={groups.coming_up} isDone={isDone} toggle={toggle} pending={pending} />
+                    <Group name="Due today" tag="bg-pink text-ink" items={groups.due} isDone={isDone} toggle={toggle} pending={pending} hot focus={focusRow} />
+                    <Group name="In progress" tag="bg-accent text-white" items={groups.in_progress} isDone={isDone} toggle={toggle} pending={pending} focus={focusRow} />
+                    <Group name="Coming up" tag="bg-white text-ink" items={groups.coming_up} isDone={isDone} toggle={toggle} pending={pending} focus={focusRow} />
                     {groups.due.length + groups.in_progress.length + groups.coming_up.length === 0 && (
                         <p className="rounded-2xl border-2 border-dashed border-ink p-6 text-center font-semibold">Nothing on your plate. Ember is suspicious.</p>
                     )}
@@ -217,7 +229,14 @@ export default function Today({ today, groups, week, weekRange, weekDone, counts
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-function Group({ name, tag, items, isDone, toggle, pending, hot }: { name: string; tag: string; items: ItemDto[]; isDone: (i: ItemDto) => boolean; toggle: (i: ItemDto) => void; pending: Set<number>; hot?: boolean }): ReactNode {
+interface FocusRow {
+    rules: FocusRules;
+    running: boolean;
+    busy: boolean;
+    onStart: (itemId: number, minutes: number) => void;
+}
+
+function Group({ name, tag, items, isDone, toggle, pending, hot, focus }: { name: string; tag: string; items: ItemDto[]; isDone: (i: ItemDto) => boolean; toggle: (i: ItemDto) => void; pending: Set<number>; hot?: boolean; focus?: FocusRow | null }): ReactNode {
     if (items.length === 0) return null;
     return (
         <section className="flex flex-col gap-2">
@@ -233,7 +252,17 @@ function Group({ name, tag, items, isDone, toggle, pending, hot }: { name: strin
                         <span className="hidden font-mono text-xs text-ink-3 md:inline">#{it.number}</span>
                         <Link href={`/items/${it.id}`} className={`truncate text-[15px] font-semibold no-underline ${done ? 'text-ink-3 line-through' : 'text-ink'}`}>{it.title}</Link>
                         <span className="hidden md:inline"><TypeChip type={it.type} /></span>
-                        <TokenPill amount={it.reward} prefix={done ? '✓ ' : '+'} tone={done ? 'mint' : 'sun'} />
+                        <span className="flex flex-wrap items-center justify-end gap-1.5">
+                            {!done && focus && (
+                                <FocusPresetPicker
+                                    itemTitle={it.title}
+                                    rules={focus.rules}
+                                    disabled={focus.busy || focus.running || pending.has(it.id)}
+                                    onPick={(minutes) => focus.onStart(it.id, minutes)}
+                                />
+                            )}
+                            <TokenPill amount={it.reward} prefix={done ? '✓ ' : '+'} tone={done ? 'mint' : 'sun'} />
+                        </span>
                         <span className={`hidden min-w-[76px] text-right text-xs font-bold md:inline ${(hot && !done && it.deadline) || isOverdue(it.deadline, done) ? 'text-[#C2185B]' : 'text-ink-3'}`}>{dueText(it.deadline)}</span>
                     </div>
                 );

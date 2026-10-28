@@ -140,6 +140,56 @@ export interface GameState {
     streak: number;
 }
 
+export type FocusSessionStatus = 'running' | 'completed' | 'canceled';
+
+/** Item snippet on a Focus session. Null item means a free Focus. */
+export interface FocusItemRef {
+    id: number;
+    number: string;
+    title: string;
+    type: ItemType;
+}
+
+/** Session resource from /api/focus. `bonus` is the preset payout, not tokens already paid. */
+export interface FocusSession {
+    id: number;
+    item_id: number | null;
+    item: FocusItemRef | null;
+    planned_minutes: number;
+    started_at: string;
+    ends_at: string;
+    status: FocusSessionStatus;
+    awarded_tokens: number;
+    bonus: number;
+}
+
+/** 201 from POST /api/focus/start and 200 from POST /api/focus/{session}/cancel. No tokens on either. */
+export interface FocusStateResponse {
+    session: FocusSession;
+    balance: number;
+    streak: number;
+}
+
+/** 200 from POST /api/focus/{session}/complete. `awarded` is the payout. The item stays open. */
+export interface FocusCompleteResponse extends FocusStateResponse {
+    awarded: number;
+}
+
+/** GET /api/focus/active. `session` is null when nothing is running. */
+export interface FocusActiveResponse {
+    session: FocusSession | null;
+}
+
+/**
+ * Bootstrap `rules.focus`.
+ * `bonuses` is a JSON object with string keys (`"25"`, `"50"`), not a nested `bonus_per_preset`.
+ */
+export interface FocusRules {
+    presets: number[];
+    bonuses: Record<string, number>;
+    daily_cap: number;
+}
+
 export type PageProps<T extends Record<string, unknown> = Record<string, unknown>> = T & {
     auth: { user: User };
     game: GameState;
@@ -150,5 +200,7 @@ export type PageProps<T extends Record<string, unknown> = Record<string, unknown
         /** Present once bootstrap sends locker streak rules. Mood falls back to 5 / 50 without them. */
         streak_bonus?: number;
         streak_length?: number;
+        /** Present once bootstrap sends Focus presets. Picker and preview read `bonuses` string keys. */
+        focus?: FocusRules;
     };
 };

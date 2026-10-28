@@ -74,6 +74,15 @@ describe('item attachments', () => {
 
     const fetchMock = () => fetch as unknown as ReturnType<typeof vi.fn>;
 
+    /** Upload attempts only. Item Show also restores a running Focus on mount. */
+    function attachmentPosts() {
+        return fetchMock().mock.calls.filter((call) => {
+            const [input, init] = call as [RequestInfo, RequestInit | undefined];
+            const method = (init?.method ?? 'GET').toUpperCase();
+            return method === 'POST' && String(input).includes('/attachments');
+        });
+    }
+
     function rejectFile(messages: string[]) {
         fetchMock().mockImplementation((input: RequestInfo, init?: RequestInit) => {
             const url = String(input);
@@ -123,7 +132,7 @@ describe('item attachments', () => {
         renderShow();
         await upload('notes.exe');
         expect((await screen.findByRole('alert')).textContent).toContain('This file type is not allowed.');
-        expect(fetchMock()).not.toHaveBeenCalled();
+        expect(attachmentPosts()).toEqual([]);
 
         const input = document.querySelector('input[type="file"]') as HTMLInputElement;
         const big = new File(['x'], 'big.pdf', { type: 'application/pdf' });
@@ -131,7 +140,7 @@ describe('item attachments', () => {
         Object.defineProperty(input, 'files', { configurable: true, value: [big] });
         fireEvent.change(input);
         expect((await screen.findByRole('alert')).textContent).toContain('The file must be 10 MB or smaller.');
-        expect(fetchMock()).not.toHaveBeenCalled();
+        expect(attachmentPosts()).toEqual([]);
         expect(screen.getByRole('button', { name: 'Drop files or browse' })).toBeTruthy();
     });
 
