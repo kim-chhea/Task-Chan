@@ -94,7 +94,7 @@ describe('Inbox triage', () => {
         vi.spyOn(router, 'reload').mockResolvedValue(undefined);
         renderInbox();
         fireEvent.click(screen.getByRole('button', { name: 'Tomorrow for Loose note' }));
-        expect(await screen.findByText(/Loose note/)).toBeTruthy();
+        expect(await screen.findByText(/“Loose note” is due/)).toBeTruthy();
         expect(api).toHaveBeenCalledWith('PATCH', '/items/1', { deadline: daysFromToday(1, todayIso()) });
         expect(vi.mocked(api).mock.calls[0][2]).not.toHaveProperty('someday');
     });
@@ -115,7 +115,7 @@ describe('Inbox triage', () => {
         renderInbox();
         fireEvent.click(screen.getByRole('button', { name: 'Someday 2' }));
         fireEvent.click(screen.getByRole('button', { name: 'Schedule Dated park on 2026-11-01' }));
-        expect(await screen.findByText(/Dated park/)).toBeTruthy();
+        expect(await screen.findByText(/“Dated park” is due/)).toBeTruthy();
         expect(api).toHaveBeenCalledWith('PATCH', '/items/3', { deadline: '2026-11-01' });
     });
 

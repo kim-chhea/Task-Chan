@@ -165,8 +165,7 @@ export default function Inbox({ inbox, someday, counts }: InboxResponse) {
 function TabButton({ on, onClick, label, count }: { on: boolean; onClick: () => void; label: string; count: number }) {
     return (
         <button type="button" aria-pressed={on} onClick={onClick} className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-bold ${on ? 'bg-ink text-white' : 'text-ink-2'}`}>
-            {label}
-            <span className={`font-mono text-xs ${on ? 'text-sun' : 'text-ink-3'}`}>{count}</span>
+            {label}{' '}<span className={`font-mono text-xs ${on ? 'text-sun' : 'text-ink-3'}`}>{count}</span>
         </button>
     );
 }
