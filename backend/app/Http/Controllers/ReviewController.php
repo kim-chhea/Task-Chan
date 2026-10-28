@@ -5,9 +5,10 @@ namespace App\Http\Controllers;
 use App\Enums\ItemStatus;
 use App\Enums\LedgerReason;
 use App\Models\Item;
+use App\Models\OwnedCosmetic;
 use Carbon\CarbonImmutable;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ReviewController extends Controller
 {
@@ -43,6 +44,8 @@ class ReviewController extends Controller
             'done' => $done->map(fn (Item $i) => [...$fmt($i), 'tokens' => $i->reward_tokens, 'day' => $i->completed_at->toDateString()]),
             'carry' => $open->map(fn (Item $i) => [...$fmt($i), 'tokens' => $i->rewardOn()]),
             'openTokens' => $open->sum(fn (Item $i) => $i->rewardOn()),
+            'owned' => OwnedCosmetic::where('user_id', $user->id)->get(['category', 'key'])
+                ->map(fn ($o) => "{$o->category}:{$o->key}")->values(),
         ]);
     }
 }

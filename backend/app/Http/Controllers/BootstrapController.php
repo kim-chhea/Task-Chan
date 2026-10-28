@@ -39,7 +39,12 @@ class BootstrapController extends Controller
                 'streak' => $user->streak?->active() ?? 0,
             ] : null,
             'catalog' => config('locker.items'),
-            'rules' => ['rewards' => config('locker.rewards'), 'early_bonus' => config('locker.early_bonus')],
+            'rules' => [
+                'rewards' => config('locker.rewards'),
+                'early_bonus' => config('locker.early_bonus'),
+                'streak_bonus' => (int) config('locker.streak_bonus'),
+                'streak_length' => (int) config('locker.streak_length'),
+            ],
         ]);
     }
 }
