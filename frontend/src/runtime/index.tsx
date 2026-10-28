@@ -58,6 +58,7 @@ interface ScreenDef {
 
 const SCREENS: ScreenDef[] = [
     { path: '/today', component: 'Today', endpoint: () => '/today', access: 'auth' },
+    { path: '/inbox', component: 'Inbox', endpoint: () => '/inbox', access: 'auth' },
     { path: '/items', component: 'Items/Index', endpoint: () => '/items', access: 'auth' },
     { path: '/items/:id', component: 'Items/Show', endpoint: (p) => `/items/${p.id}`, access: 'auth' },
     { path: '/calendar', component: 'Calendar', endpoint: () => '/calendar', access: 'auth' },

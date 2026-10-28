@@ -28,12 +28,41 @@ export interface ItemDto {
     priority: Priority;
     sector: string | null;
     deadline: string | null;
+    /** Parked for later. The API always sends this. A non-null deadline means it is false. */
+    someday: boolean;
     received_at: string | null;
     completed_at: string | null;
     done: boolean;
     reward: number;
     master_record?: MasterRecordRef | null;
     custom?: Record<string, string | number | boolean>;
+}
+
+export interface InboxCounts {
+    inbox: number;
+    someday: number;
+}
+
+/** GET /api/inbox. Inbox is open, undated, and not parked. Someday is open and parked. */
+export interface InboxResponse {
+    inbox: ItemDto[];
+    someday: ItemDto[];
+    counts: InboxCounts;
+}
+
+export interface TodayCounts {
+    inbox: number;
+}
+
+/** GET /api/today. `coming_up` is scheduled work only — Inbox and Someday stay off that list. */
+export interface TodayResponse {
+    today: string;
+    groups: { due: ItemDto[]; in_progress: ItemDto[]; coming_up: ItemDto[] };
+    progress: { done: number; total: number };
+    week: { dow: string; n: number; date: string; count: number; today: boolean }[];
+    weekRange: string;
+    weekDone: number;
+    counts: TodayCounts;
 }
 
 export type Category = 'hair' | 'outfit' | 'gear' | 'partner' | 'stage';
