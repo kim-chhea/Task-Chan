@@ -10,15 +10,17 @@ import Sticker from '@/Components/ui/Sticker';
 import { Coin } from '@/Components/ui/TokenPill';
 import { useToast } from '@/Components/ui/Toast';
 import { TypeChip } from '@/Components/ui/Chip';
+import TaskLinesForm from '@/Components/TaskLinesForm';
 import AppLayout from '@/Layouts/AppLayout';
 import { attachmentErrorText, ATTACHMENT_ACCEPT, clientFileError } from '@/lib/attachments';
 import { api, apiUrl, ApiError } from '@/lib/api';
+import { postFollowUps } from '@/lib/taskLines';
 import { fileSize, longDay, PRIORITY_LABEL, shortDay, STATUS_LABEL, todayIso, TYPE_LABEL } from '@/lib/format';
 import { liftMood } from '@/lib/streakMood';
 import { useRestingMood } from '@/Components/useRestingMood';
 import { rewardPreview } from '@/lib/tokens';
 import type { CustomFieldDto } from '@/lib/columns';
-import type { ItemDto, ItemStatus, MasterRecordRef, PageProps } from '@/types';
+import type { ItemDto, ItemStatus, MasterRecordRef, PageProps, TaskLinePayload } from '@/types';
 
 const NotesEditor = lazy(() => import('@/Components/NotesEditor'));
 
@@ -144,6 +146,19 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
         try { await api('PATCH', `/items/${item.id}`, { notes: blocks }); setSavedAt('Saved just now'); } catch (e) { fail(e); }
     }
 
+    async function addFollowUps(payload: TaskLinePayload) {
+        try {
+            const res = await postFollowUps(item.id, payload);
+            reconcile(res.balance);
+            const n = res.items.length;
+            toast(n === 1 ? 'Added 1 follow-up, linked to this meeting.' : `Added ${n} follow-ups, linked to this meeting.`);
+            reload(['linked']);
+        } catch (e) {
+            fail(e);
+            throw e;
+        }
+    }
+
     const preview = rewardPreview(rules, item.priority, item.deadline, isDone && item.completed_at ? item.completed_at.slice(0, 10) : todayIso());
     const kaiLine = isDone ? `Done. +${item.reward} in the bag.` : doneCount >= 2 ? 'Halfway there. Keep going!' : 'Let’s knock this one out.';
 
@@ -178,6 +193,20 @@ export default function Show({ item, linked, linkable, cases, fields }: Props) {
                             ))}
                         </div>
                     </header>
+
+                    {/* The API rejects follow-ups on anything that is not a meeting. */}
+                    {item.type === 'meeting' && (
+                        <TaskLinesForm
+                            name="Follow-ups"
+                            eyebrow="Follow-ups"
+                            heading="Tasks from this meeting"
+                            hint="These become tasks linked to this meeting. No date sends a task to the Inbox. A date shows it on Today and the calendar."
+                            submitLabel="Add follow-ups"
+                            pendingLabel="Adding…"
+                            lineNoun="follow-up"
+                            onSubmit={addFollowUps}
+                        />
+                    )}
 
                     <Card rise aria-label="Notes" className="flex flex-col gap-2 !p-5">
                         <div className="flex items-center justify-between font-mono text-xs uppercase tracking-wider text-ink-3"><span>NOTES · メモ</span><span>{savedAt}</span></div>

@@ -38,6 +38,58 @@ export interface ItemDto {
     custom?: Record<string, string | number | boolean>;
 }
 
+/**
+ * One line on POST /api/items/{item}/follow-ups and POST /api/master-records/{id}/spawn.
+ * Only `title` is required. Omit `deadline` (or leave it blank) and the task stays in the Inbox.
+ * `someday: true` parks it. The server clears someday when a deadline is set.
+ */
+export interface TaskLine {
+    title: string;
+    deadline?: string;
+    priority?: Priority;
+    sector?: string;
+    someday?: boolean;
+}
+
+/** Editor row before it is trimmed into a {@link TaskLine}. */
+export interface TaskLineDraft {
+    title: string;
+    deadline?: string | null;
+    priority?: Priority | null;
+    sector?: string | null;
+    someday?: boolean | null;
+}
+
+/** Shared `{ items: [1..20 lines] }` body. */
+export interface TaskLinePayload {
+    items: TaskLine[];
+}
+
+/** 201 from POST /api/items/{item}/follow-ups. */
+export interface FollowUpsResponse {
+    items: ItemDto[];
+    linked_to: { id: number; number: string; title: string; type: ItemType };
+    balance: number;
+    streak: number;
+}
+
+/** 201 from POST /api/master-records/{masterRecord}/spawn. */
+export interface SpawnResponse {
+    items: ItemDto[];
+    record: { id: number; code: string; title: string };
+    balance: number;
+    streak: number;
+}
+
+/** `stats` on GET /api/master-records/{masterRecord}. */
+export interface CaseStats {
+    total: number;
+    open: number;
+    done: number;
+    next_deadline: string | null;
+    open_tokens: number;
+}
+
 export interface InboxCounts {
     inbox: number;
     someday: number;
