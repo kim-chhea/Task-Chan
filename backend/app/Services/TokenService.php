@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\ItemStatus;
 use App\Enums\LedgerReason;
 use App\Exceptions\InsufficientTokensException;
+use App\Models\FocusSession;
 use App\Models\Item;
 use App\Models\OwnedCosmetic;
 use App\Models\Streak;
@@ -141,6 +142,34 @@ class TokenService
             OwnedCosmetic::create(['user_id' => $user->id, 'category' => $category, 'key' => $key]);
 
             return $user->balance();
+        });
+    }
+
+    /**
+     * Pay the Focus bonus for one session. Idempotent on ref "focus:{id}".
+     * The amount comes from config for the session's preset, never from the client.
+     */
+    public function awardFocus(FocusSession $session): int
+    {
+        return DB::transaction(function () use ($session) {
+            $user = $this->lockUser($session->user_id);
+            $session->refresh();
+
+            $ref = "focus:{$session->id}";
+            $existing = TokenLedger::where('ref', $ref)->first();
+            if ($existing !== null) {
+                return (int) $existing->delta;
+            }
+
+            $bonuses = config('locker.focus.bonus_per_preset');
+            if (! is_array($bonuses) || ! array_key_exists($session->planned_minutes, $bonuses)) {
+                throw new InvalidArgumentException('Unknown focus length.');
+            }
+
+            $bonus = (int) $bonuses[$session->planned_minutes];
+            $this->record($user, $bonus, LedgerReason::FocusBonus, $session->item, null, $ref);
+
+            return $bonus;
         });
     }
 

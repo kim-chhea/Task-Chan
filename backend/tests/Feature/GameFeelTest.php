@@ -9,9 +9,17 @@ use App\Services\TokenService;
 test('bootstrap rules include streak bonus and streak length from locker config', function () {
     $rules = $this->getJson('/api/bootstrap')->assertOk()->json('rules');
 
-    expect($rules)->toHaveKeys(['rewards', 'early_bonus', 'streak_bonus', 'streak_length'])
+    expect($rules)->toHaveKeys(['rewards', 'early_bonus', 'streak_bonus', 'streak_length', 'focus'])
         ->and($rules['streak_bonus'])->toBeInt()->toBe((int) config('locker.streak_bonus'))
-        ->and($rules['streak_length'])->toBeInt()->toBe((int) config('locker.streak_length'));
+        ->and($rules['streak_length'])->toBeInt()->toBe((int) config('locker.streak_length'))
+        ->and($rules['focus']['presets'])->toBe(array_values(array_map('intval', config('locker.focus.presets'))))
+        ->and($rules['focus']['daily_cap'])->toBe((int) config('locker.focus.daily_cap'))
+        ->and($rules['focus']['bonuses'])->toBe([
+            '25' => (int) config('locker.focus.bonus_per_preset.25'),
+            '50' => (int) config('locker.focus.bonus_per_preset.50'),
+        ])
+        ->and($rules['focus']['bonuses']['25'])->toBe(10)
+        ->and($rules['focus']['bonuses']['50'])->toBe(20);
 });
 
 test('review lists free defaults and one purchase as locker owned strings', function () {

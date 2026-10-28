@@ -9,4 +9,5 @@ enum LedgerReason: string
     case EarlyBonus = 'early_bonus';
     case StreakBonus = 'streak_bonus';
     case Purchase = 'purchase';
+    case FocusBonus = 'focus_bonus';
 }

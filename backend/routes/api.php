@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AttachmentController;
 use App\Http\Controllers\Api\CustomFieldController;
+use App\Http\Controllers\Api\FocusController;
 use App\Http\Controllers\Api\ItemApiController;
 use App\Http\Controllers\Api\ItemColumns;
 use App\Http\Controllers\Api\ItemLinkController;
@@ -86,4 +87,9 @@ Route::middleware(['auth:sanctum', 'throttle:240,1'])->group(function () {
     Route::post('locker/buy', [LockerApiController::class, 'buy']);
     Route::post('locker/equip', [LockerApiController::class, 'equip']);
     Route::post('locker/mascot', [LockerApiController::class, 'mascot']);
+
+    Route::post('focus/start', [FocusController::class, 'start']);
+    Route::get('focus/active', [FocusController::class, 'active']);
+    Route::post('focus/{session}/complete', [FocusController::class, 'complete'])->whereNumber('session');
+    Route::post('focus/{session}/cancel', [FocusController::class, 'cancel'])->whereNumber('session');
 });

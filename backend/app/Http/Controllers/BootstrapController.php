@@ -44,6 +44,11 @@ class BootstrapController extends Controller
                 'early_bonus' => config('locker.early_bonus'),
                 'streak_bonus' => (int) config('locker.streak_bonus'),
                 'streak_length' => (int) config('locker.streak_length'),
+                'focus' => [
+                    'presets' => array_values(array_map('intval', config('locker.focus.presets'))),
+                    'bonuses' => array_map('intval', config('locker.focus.bonus_per_preset')),
+                    'daily_cap' => (int) config('locker.focus.daily_cap'),
+                ],
             ],
         ]);
     }

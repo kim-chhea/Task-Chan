@@ -76,4 +76,12 @@ return [
     'early_bonus' => 5,
     'streak_bonus' => 50,
     'streak_length' => 5,
+
+    // Focus timer. The bonus is paid when the server accepts completion, not from the client clock.
+    'focus' => [
+        'presets' => [25, 50],
+        'bonus_per_preset' => [25 => 10, 50 => 20],
+        'daily_cap' => 4,
+        'complete_grace_seconds' => 5,
+    ],
 ];

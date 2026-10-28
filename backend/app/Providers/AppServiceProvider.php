@@ -4,9 +4,11 @@ namespace App\Providers;
 
 use App\Console\ServeCommand;
 use App\Models\CustomField;
+use App\Models\FocusSession;
 use App\Models\Item;
 use App\Models\MasterRecord;
 use App\Policies\CustomFieldPolicy;
+use App\Policies\FocusSessionPolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\MasterRecordPolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -42,5 +44,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Item::class, ItemPolicy::class);
         Gate::policy(MasterRecord::class, MasterRecordPolicy::class);
         Gate::policy(CustomField::class, CustomFieldPolicy::class);
+        Gate::policy(FocusSession::class, FocusSessionPolicy::class);
     }
 }
